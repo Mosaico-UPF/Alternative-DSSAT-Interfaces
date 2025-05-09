@@ -1,0 +1,17 @@
+*SOILS: General DSSAT Soil Input File
+
+*UMVA030003  -99         SLC      75 -99                                                             
+@SITE        COUNTRY          LAT     LONG SCS FAMILY
+ umarya      India         23.500   80.750 FINE, HYPHERTERMIC, VERTIC USTOCHREPTS                          
+@ SCOM  SALB  SLU1  SLDR  SLRO  SLNF  SLPF  SMHB  SMPX  SMKE
+    BN  0.13   6.0  0.60    61  1.00  1.00 IB001 IB001 IB001
+@  SLB  SLMH  SLLL  SDUL  SSAT  SRGF  SSKS  SBDM  SLOC  SLCL  SLSI  SLCF  SLNI  SLHW  SLHB  SCEC  SADC
+    11 -99   0.202 0.337 0.375 1.000  0.62  1.40  0.50  24.5  13.2   0.0   -99   -99   -99   -99   -99
+    31 -99   0.243 0.376 0.408 1.000  0.31  1.40  0.50  36.4  18.4   0.0   -99   -99   -99   -99   -99
+    50 -99   0.266 0.382 0.412 1.000  0.58  1.40  0.50  43.3  11.1   0.0   -99   -99   -99   -99   -99
+    75 -99   0.285 0.402 0.432 1.000  0.53  1.40  0.50  48.2  12.9   0.0   -99   -99   -99   -99   -99
+@  SLB  SLPX  SLPT  SLPO CACO3  SLAL  SLFE  SLMN  SLBS  SLPA  SLPB  SLKE  SLMG  SLNA  SLSU  SLEC  SLCA
+    11   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99
+    31   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99
+    50   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99
+    75   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99   -99

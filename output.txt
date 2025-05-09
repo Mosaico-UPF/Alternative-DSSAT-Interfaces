@@ -1,0 +1,11 @@
+General Information:
+Country: 
+Institute Code: 
+Site Name: 
+Latitude: 
+Longitude: 
+Soil Data Source: 
+Soil Series Name: 
+Soil Classification: 
+
+--- End of Page 0 Data ---
