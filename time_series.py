@@ -47,6 +47,10 @@ class GraphWindow(QWidget):
         self.date_mode_group.addButton(self.date_mode_calendar)
         self.date_mode_group.addButton(self.date_mode_dap)
 
+        self.date_mode_calendar.toggled.connect(self.refresh_plot)
+        self.date_mode_dap.toggled.connect(self.refresh_plot)
+
+
         if self.force_calendar_mode:
             self.date_mode_dap.setEnabled(False)
             self.date_mode_dap.setChecked(False)
@@ -92,7 +96,8 @@ class GraphWindow(QWidget):
         ax = self.figure.add_subplot(111)
 
         if plot_type is None:
-            plot_type = "scatter" if any(len(d['x']) == 1 for d in self.plot_data) else "time series"
+            plot_type = "scatter" if any(len(d.get('y', [])) == 1 for d in self.plot_data) else "time series"
+
 
         if self.force_calendar_mode:
             use_calendar_mode = True
@@ -100,10 +105,11 @@ class GraphWindow(QWidget):
             use_calendar_mode = self.date_mode_calendar.isChecked()
 
         for data in self.plot_data:
+            x_values = data['x_calendar'] if use_calendar_mode else data['x_dap']
             if plot_type == "time series":
-                ax.plot(data['x'], data['y'], label=data['label'])
+                ax.plot(x_values, data['y'], label=data['label'])
             else:
-                ax.scatter(data['x'], data['y'], label=data['label'])
+                ax.scatter(x_values, data['y'], label=data['label'])
 
         ax.set_xlabel('Calendar Day' if use_calendar_mode else 'Days After Planting')
         ax.set_ylabel('Value')
@@ -408,34 +414,38 @@ class TimeSeriesWindow(QMainWindow):
                                 print(f"Invalid or missing 'day' in .t file: {day_str}. Error: {e}")
                                 x_values = list(range(len(y_values)))
                         else:
-                            use_calendar_mode = True
-                            if hasattr(self, 'graph_window') and hasattr(self.graph_window, 'date_mode_calendar'):
-                                use_calendar_mode = self.graph_window.date_mode_calendar.isChecked()
+                            year_var = next((v for v in entry['values'] if v['cde'].upper() == '@YEAR'), None)
+                            doy_var = next((v for v in entry['values'] if v['cde'].upper() == 'DOY'), None)
+                            dap_var = next((v for v in entry['values'] if v['cde'].upper() == 'DAP'), None)
 
-                                start_date = entry.get('start_date')
+                            calendar_x = []
+                            dap_x = []
+
+                            if year_var and doy_var:
                                 try:
-                                    if not isinstance(start_date, datetime):
-                                        start_date = datetime.strptime(start_date, '%Y-%m-%d')
-                                    if use_calendar_mode:
-                                        x_values = [start_date + timedelta(days=i) for i in range(len(y_values))]
-                                    else:
-                                        x_values = list(range(len(y_values)))  # DAP
+                                    calendar_x = [
+                                        datetime.strptime(f"{y}-{int(d):03}", "%Y-%j")
+                                        for y, d in zip(year_var['values'], doy_var['values'])
+                                    ]
                                 except Exception as e:
-                                    print(f"Error parsing start_date '{start_date}': {e}")
-                                    x_values = list(range(len(y_values)))
+                                    print(f"Error converting YEAR+DOY to dates: {e}")
+                                    calendar_x = list(range(len(y_values)))
 
-                                else:
-                                    print(f"Invalid start_date for {run_name}: {start_date}")
-                                    x_values = list(range(len(y_values)))
+                            if dap_var:
+                                try:
+                                    dap_x = list(map(int, dap_var['values']))
+                                except Exception as e:
+                                    print(f"Error parsing DAP values: {e}")
+                                    dap_x = list(range(len(y_values)))
                             else:
-                                x_values = list(range(len(y_values)))
+                                dap_x = list(range(len(y_values)))
 
-                        plot_data.append({
-                            'x': x_values,
-                            'y': y_values,
-                            'label': f'{cde} ({run_name})'
-                        })
-
+                            plot_data.append({
+                                'x_calendar': calendar_x,
+                                'x_dap': dap_x,
+                                'y': y_values,
+                                'label': f'{cde} ({run_name})'
+                            })
                     except ValueError as e:
                         print(f"ValueError for {cde}: {e}")
                         continue
