@@ -76,6 +76,34 @@ app.get('/api/out/:crop/:file', (request, response) => {
     response.end(JSON.stringify(fileContent));
 })
 
+app.get('/api/t/:crop/:file', async (request, response) => {
+    let crop = request.params.crop;
+    let tfile = request.params.file;
+
+    jdssatInstance = new jdssat();
+    jdssatInstance.initialize();
+
+    let fileContent = await jdssatInstance.readTFile(crop, tfile);
+    
+    // Transform T-file data to match OUT file structure
+    const transformedData = fileContent.map(entry => {
+        // Convert single values to arrays like OUT files
+        const values = entry.values.map(v => ({
+            cde: v.cde,
+            values: Array.isArray(v.values) ? v.values : [v.values]
+        }));
+        
+        return {
+            run: entry.runName || entry.run,
+            experiment: entry.experiment,
+            day: entry.day || 0, // Use provided day or default
+            values: values
+        };
+    });
+
+    response.json(transformedData);
+});
+
 app.get('/api/cde', (request, response) => {
 
     jdssatInstance = new jdssat();
@@ -116,7 +144,20 @@ app.get('/api/config/', (request, response) => {
     } else if (config === "platform") {
         let platform = jdssatInstance.platform();
         response.end(JSON.stringify(platform));
-    }
-
+    } else{
     response.end(JSON.stringify("not found"));
+    }
 })
+app.get('/api/evaluate/:crop/:file', (request, response) => {
+    let crop = request.params.crop;
+    let file = request.params.file;
+    jdssatInstance = new jdssat();
+    jdssatInstance.initialize();
+    try {
+        let fileContent = jdssatInstance.readEvaluateFile(crop, file);
+        response.json(fileContent);
+    } catch (error) {
+        console.error('Error reading evaluate file:', error);
+        response.status(500).json({ error: 'Error reading evaluate file' });
+    }
+});

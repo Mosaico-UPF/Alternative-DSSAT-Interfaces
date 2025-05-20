@@ -7,14 +7,16 @@ var environment = [
 
 var dssatPro = [
     { "version": "DSSAT47", "dssatPro": "DSSATPRO.V47" },
-    { "version": "DSSAT46", "dssatPro": "DSSATPRO.v46" }
+    { "version": "DSSAT46", "dssatPro": "DSSATPRO.v46" },
+    { "version": "DSSAT48", "dssatPro": "DSSATPRO.v48"}
 ];
 
 var supportOutFilesData = ["PlantGro.OUT", "SoilNi.OUT", "SoilNiBal.OUT", "PlantN.OUT", "PlantGrf.OUT", "SoilTemp.OUT", "SoilWat.OUT", "Weather.OUT"];
 
 // Update DSSAT version descending, because the function that decides which dssat version to use get the latest dssat version 
 // for instance, if DSSAT47 is found on user's file system, the preferredVersion function ends loop
-var dssatVersions = ["DSSAT47", "DSSAT46"];
+var dssatVersions = ["DSSAT48", "DSSAT47", "DSSAT46",];
+
 
 exports.environmentVariables = function (platform) {
     return environment.find(env => env.platform === platform);

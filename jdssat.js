@@ -15,6 +15,8 @@ var Output = require('./source/output');
 var Treatments = require('./source/treatments');
 var Simulation = require('./source/simulation');
 var config = require('./source/config');
+var Tfiles = require('./source/tfiles');
+var EvaluateOutput = require('./source/evaluateOutput');
 
 String.prototype.format = function () {
   var formatted = this;
@@ -51,32 +53,33 @@ class jdssat {
 
   // This function load all global variables that will be used in all functions of the dssat.js
   initialize() {
-    try {
-      let platform = operationSystem.platform();
-      platformConfig = config.environmentVariables(platform);
-      latestVersion = this.preferredVersion();
+      try {
+          let platform = operationSystem.platform();
+          platformConfig = config.environmentVariables(platform);
+          latestVersion = this.preferredVersion();
 
-      console.log('dssat initialize plataform:{0} and version:{1}'.format(platform, latestVersion));
+          console.log('dssat initialize platform:{0} and version:{1}'.format(platform, latestVersion));
 
-      globalBasePath = "{0}{1}/".format(platformConfig.path, latestVersion);
+          globalBasePath = "{0}{1}/".format(platformConfig.path, latestVersion);
 
-      let configuration = new Configuration(fs, globalBasePath);
-      let cde = new CDE(fs, globalBasePath);
+          let configuration = new Configuration(fs, globalBasePath);
+          let cde = new CDE(fs, globalBasePath);
+          this._evaluateOutput = new EvaluateOutput(fs, globalBasePath, cde); // Instantiate EvaluateOutput
 
-      if (platform === "win32" || platform === "browser") {
-        delimiterPath = "//";
-        dssatPro = configuration.profile();
-      } else {
-        delimiterPath = "/";
+          if (platform === "win32" || platform === "browser") {
+              delimiterPath = "//";
+              dssatPro = configuration.profile();
+          } else {
+              delimiterPath = "/";
+          }
+
+          dataCde = cde.load();
+
+          this.outputCde();
+      } catch (error) {
+          console.log(error.message);
+          console.log(error);
       }
-
-      dataCde = cde.load();
-
-      this.outputCde();
-    } catch (error) {
-      alert(error.message);
-      console.log(error);
-    }
   }
 
   preferredVersion() {
@@ -134,10 +137,12 @@ class jdssat {
   }
 
   outFiles(cropSelected) {
-    let output = new Output(fs);
-    return output.getOutFiles(globalBasePath, delimiterPath, cropSelected);
+      let output = new Output(fs);
+      let evaluateOutput = this._evaluateOutput; // Use instantiated EvaluateOutput
+      let outFiles = output.getOutFiles(globalBasePath, delimiterPath, cropSelected);
+      let evaluateFiles = evaluateOutput.getOutFiles(cropSelected);
+      return [...new Set([...outFiles, ...evaluateFiles])]; // Merge and remove duplicates
   }
-
   notEmptyString(value) {
     for (let i = 0; i < value.length; i++) {
       if (value[i] !== " " && value[i]) return true;
@@ -149,6 +154,10 @@ class jdssat {
     let output = new Output(fs);
     return output.read(globalBasePath, crop, outFile);
   }
+
+  readEvaluateFile(crop, file) {
+      return this._evaluateOutput.read(crop, file);
+    }
 
   getObservedDataFileExt(ext) {
     let extesionFileParts = ext.split('.');
@@ -239,7 +248,7 @@ class jdssat {
       let command = `start notepad ${filePath}`;
       exec(command, function (err) {
         if (err) {
-          alert("[openFileInEditor] error: " + err);
+          console.log("[openFileInEditor] error: " + err);
         } else {
           console.log("open file: " + filePath);
         }
@@ -468,6 +477,14 @@ class jdssat {
     return xfile.valToInput(val);	
   }
   
+readTFile(crop, file) {
+  return new Promise((resolve) => {
+      Tfiles.readTFile(crop, file, (data) => {
+          resolve(data);
+      });
+  });
 }
+}
+
 
 module.exports = jdssat;

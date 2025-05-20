@@ -49,10 +49,9 @@ class Output {
         let treatmentDescription = "";
     
         for (let i = 0; i <= lines.length; i++) {
-          // get last treatment
           if (i == lines.length) {
             break;
-          }
+        }
     
           if (lines[i].startsWith(' EXPERIMENT')) {
             experiment = lines[i].substring(18, lines[i].length).split(' ')[0];
@@ -64,7 +63,6 @@ class Output {
             let treatmentNumber = run[0];
             treatmentDescription = run[1];
     
-            // Get treatment number only
             let treatment = treatmentNumber.toString().replace(TREATMENT_DELIMITER, EMPTY_DELIMITER).trim();
     
             let hasTreatment = result.find(item => item.run === treatmentDescription.toString().trim());
@@ -73,7 +71,6 @@ class Output {
               let model = { run: treatmentDescription.toString().trim(), experiment: experiment, treatmentNumber: treatment, values: [] };
               result.push(model);
             }
-            // clean up header to the next round
             experiments = [];
     
             treatment = treatmentNumber;
@@ -81,7 +78,6 @@ class Output {
           }
     
           if (lines[i].startsWith(START_HEADER_DELIMITER)) {
-            // clean up header to the next round
             headers = [];
     
             let arrayHeaders = lines[i].split(BLANK_SPACE_DELIMITER);
@@ -93,19 +89,15 @@ class Output {
             }
             continue;
           }
-    
-          // check if line start with space and isn't empty line
           if (lines[i].startsWith(BLANK_SPACE_DELIMITER) &&
             this.notEmptyString(lines[i]) &&
             !lines[i].includes(MODEL_DELIMITER) &&
             !lines[i].includes(EXPERIMENT_DELIMITER) &&
             !lines[i].includes(DATA_PATH_DELIMITER) &&
             !lines[i].includes(TREATMENT_DELIMITER)) {
-            // remove firt space from lines
             let simulationValues = lines[i].substring(1, lines[i].length);
             let simulationValuesArray = simulationValues.split(BLANK_SPACE_DELIMITER);
     
-            // variable used to keep an index to retrieve the header from headers array
             let index = 0;
     
             for (let k = 0; k < simulationValuesArray.length; k++) {
@@ -121,13 +113,22 @@ class Output {
               }
             }
     
-            // add experiments to the array position results
             result[result.length - 1].values = experiments;
           }
         }
     
         return result;
     }
+    convertYearDoyToDate(year, doy) {
+      const y = parseInt(year);
+      const d = parseInt(doy);
+      if (isNaN(y) || isNaN(d)) return null;
+  
+      const date = new Date(Date.UTC(y, 0, 1)); 
+      date.setUTCDate(date.getUTCDate() + d - 1);
+  
+      return date.toISOString().split('T')[0]; 
+  }
 }
 
 module.exports = Output;
