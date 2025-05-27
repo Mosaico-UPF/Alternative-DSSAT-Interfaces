@@ -45,7 +45,7 @@
      </size>
     </property>
     <property name="currentIndex">
-     <number>3</number>
+     <number>0</number>
     </property>
     <widget class="QWidget" name="newFile_page1">
      <widget class="QGroupBox" name="horizontalGenInfo">
@@ -419,7 +419,7 @@
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <widget class="QGroupBox" name="inputTable_box">
+     <widget class="QFrame" name="inputTable_box">
       <property name="geometry">
        <rect>
         <x>11</x>
@@ -438,7 +438,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QGroupBox" name="table_box">
+     <widget class="QFrame" name="table_box">
       <property name="geometry">
        <rect>
         <x>11</x>
@@ -545,7 +545,7 @@
         </property>
        </column>
       </widget>
-      <widget class="QGroupBox" name="vertical_buttons">
+      <widget class="QFrame" name="vertical_buttons">
        <property name="geometry">
         <rect>
          <x>1642</x>
@@ -555,18 +555,6 @@
         </rect>
        </property>
        <property name="autoFillBackground">
-        <bool>false</bool>
-       </property>
-       <property name="title">
-        <string/>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-       </property>
-       <property name="flat">
-        <bool>false</bool>
-       </property>
-       <property name="checkable">
         <bool>false</bool>
        </property>
        <layout class="QVBoxLayout" name="verticalLayout">
@@ -597,7 +585,7 @@
        </layout>
       </widget>
      </widget>
-     <widget class="QGroupBox" name="okCancel_groupBox1">
+     <widget class="QFrame" name="okCancel_frame1">
       <property name="geometry">
        <rect>
         <x>1430</x>
@@ -605,12 +593,6 @@
         <width>221</width>
         <height>52</height>
        </rect>
-      </property>
-      <property name="title">
-       <string notr="true"/>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_10">
        <item>
@@ -627,7 +609,7 @@
      </widget>
     </widget>
     <widget class="QWidget" name="newFile_moreInputs">
-     <widget class="QGroupBox" name="moreInputs_groupBox">
+     <widget class="QFrame" name="moreInputs_frame">
       <property name="geometry">
        <rect>
         <x>11</x>
@@ -635,9 +617,6 @@
         <width>91</width>
         <height>40</height>
        </rect>
-      </property>
-      <property name="title">
-       <string/>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
        <item>
@@ -649,7 +628,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QGroupBox" name="table_groupBox">
+     <widget class="QFrame" name="table_frame">
       <property name="geometry">
        <rect>
         <x>11</x>
@@ -657,9 +636,6 @@
         <width>1631</width>
         <height>411</height>
        </rect>
-      </property>
-      <property name="title">
-       <string/>
       </property>
       <widget class="QTableWidget" name="tableWidget_2">
        <property name="geometry">
@@ -719,7 +695,7 @@
        </column>
       </widget>
      </widget>
-     <widget class="QGroupBox" name="okCancel_groupBox">
+     <widget class="QFrame" name="okCancel_frame">
       <property name="geometry">
        <rect>
         <x>1421</x>
@@ -727,12 +703,6 @@
         <width>221</width>
         <height>52</height>
        </rect>
-      </property>
-      <property name="title">
-       <string/>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
@@ -746,7 +716,7 @@
      </widget>
     </widget>
     <widget class="QWidget" name="newFile_page4">
-     <widget class="QGroupBox" name="groupBox">
+     <widget class="QFrame" name="frame">
       <property name="geometry">
        <rect>
         <x>11</x>
@@ -754,9 +724,6 @@
         <width>713</width>
         <height>71</height>
        </rect>
-      </property>
-      <property name="title">
-       <string>Surface Parameters</string>
       </property>
       <widget class="QLabel" name="runoffCurve_label">
        <property name="geometry">

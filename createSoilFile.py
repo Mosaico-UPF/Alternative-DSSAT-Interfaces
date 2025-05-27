@@ -43,7 +43,7 @@ def build_soil_file(
         salb=salb, slu1=slu1, sldr=sldr, slro=slro,
         slnf=slnf, slpf=slpf, smhb=smhb, smpx=smpx, smke=smke,
         soil_data_source=soil_data_source,
-        soil_clasification="SCL",                 # << aqui!
+        soil_clasification="SCL",               
         soil_series_name=soil_series_name,
         scs_family=scs_family,
         scom=scom,
@@ -61,7 +61,6 @@ if __name__ == "__main__":
         country="India",
         lat=23.5, lon=80.75,
         layers=[
-            # camadas completas, exatamente como você quer
             {"slb": 11, "slll": .175, "sdul": .271, "ssat": .415, "srgf": 1,
              "ssks": .43, "sbdm": 1.47, "sloc": .97, "slcl": 24.5, "slsi": 13.2,
              "slhw": 6.7, "scec": 18.5, "slke": .3, "slca": 11.3},

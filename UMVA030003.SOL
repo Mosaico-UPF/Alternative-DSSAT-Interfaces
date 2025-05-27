@@ -1,6 +1,6 @@
 *SOILS: General DSSAT Soil Input File
 
-*UMVA030003  -99         SCL      75 -99                                                             
+*UMVA030003  -99         SCL      75 Updated Soil                                                    
 @SITE        COUNTRY          LAT     LONG SCS FAMILY
  umarya      India         23.500   80.750 FINE, HYPHERTERMIC, VERTIC USTOCHREPTS                          
 @ SCOM  SALB  SLU1  SLDR  SLRO  SLNF  SLPF  SMHB  SMPX  SMKE

@@ -22,7 +22,7 @@ def show_profiles(sol_path: str | Path) -> None:
     for idx, code in enumerate(codes, start=1):
         prof: SoilProfile = SoilProfile.from_file(code, sol_path)
         print(f"===== Perfil {idx}: {code.strip()} =====")
-        print(prof._write_sol())          # <-- texto completo do perfil
+        print(prof._write_sol())         
 
 if __name__ == "__main__":
     show_profiles("AG.SOL")

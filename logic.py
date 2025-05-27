@@ -18,8 +18,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.buttonBox_3.rejected.connect(self.goBack)
         self.ui.buttonBox_2.accepted.connect(self.goBack)
         self.ui.buttonBox_2.rejected.connect(self.goBack)
-        self.ui.Finish.accepted.connect(self.handlePage3Ok)
-        self.ui.Finish.rejected.connect(self.goToPage2)
+        self.ui.finish.accepted.connect(self.handlePage3Ok)
+        self.ui.finish.rejected.connect(self.goToPage2)
         self.ui.pushButton_2.clicked.connect(self.goForward)
         self.ui.pushButton_3.clicked.connect(self.addLayer)
         self.ui.pushButton_4.clicked.connect(self.deleteLayer)
@@ -39,8 +39,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.checkButton()
 
     def _prepare_combo(self, combo: QComboBox):
-        combo.setEditable(False)        # ← volta ao comportamento padrão
-        combo.setInsertPolicy(QComboBox.NoInsert)   # (se quiser manter)
+        combo.setEditable(False)       
+        combo.setInsertPolicy(QComboBox.NoInsert)   
         combo.setCurrentIndex(-1)       # nenhum item selecionado → caixa vazia
 
     def checkButton(self):
@@ -146,7 +146,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 with open(file_name, "r", encoding="utf-8") as f:
                     content = f.read()
                     QMessageBox.information(self, "Arquivo Aberto", f"Conteúdo do arquivo:\n\n{content[:500]}...\n\n(Truncado)")
-                # Aqui você pode fazer o que quiser com o conteúdo, como carregar na interface
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Não foi possível abrir o arquivo:\n{str(e)}")
 
