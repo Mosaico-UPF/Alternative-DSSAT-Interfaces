@@ -1,4 +1,3 @@
-# C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\ui\options_menu.py
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QPushButton, QMessageBox
 from PyQt5.QtCore import Qt
 
@@ -78,3 +77,11 @@ class OptionsDialog(QDialog):
     def get_plot_type(self):
         selected_item = self.tree_widget.currentItem()
         return selected_item.text(0).lower().replace(" ", "_") if selected_item else self.plot_type
+
+if __name__ == "__main__":
+    from PyQt5.QtWidgets import QApplication
+    import sys
+    app = QApplication(sys.argv)
+    dialog = OptionsDialog()
+    dialog.show()
+    sys.exit(app.exec_())

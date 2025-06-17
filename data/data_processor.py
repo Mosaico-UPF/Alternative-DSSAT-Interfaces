@@ -29,9 +29,13 @@ def load_file_data(file_path):
     file_ext = os.path.splitext(file_name)[1].lower()
     directory = os.path.dirname(file_path)
 
+    # Determine the URL
     if file_ext in CROP_T_FILE_EXTENSIONS:
         crop_type = CROP_T_FILE_EXTENSIONS[file_ext]
         url = f"http://localhost:3000/api/t/{crop_type}/{file_name}"
+    elif file_name.lower() == "evaluate.out":
+        crop_name = os.path.basename(directory)
+        url = f"http://localhost:3000/api/evaluate/{crop_name}/{file_name}"
     elif file_name.lower().endswith('.out'):
         crop_name = os.path.basename(directory)
         url = f"http://localhost:3000/api/out/{crop_name}/{file_name}"
@@ -46,15 +50,35 @@ def load_file_data(file_path):
         if response.text.strip() == "":
             return None, f"No data returned for file: {file_name}"
 
-        file_data = response.json()
-        if file_data is None:
-            return None, f"Invalid response for file: {file_name}"
+        file_type = get_file_type(file_name)
 
-        # Add file type to each entry
-        for entry in file_data:
-            if isinstance(entry, dict):
-                entry["file_type"] = get_file_type(file_name)
-        return file_data, None
+        # Parse and normalize
+        if file_type == "evaluate":
+            raw_json = response.json()
+            if "results" not in raw_json:
+                return None, f"Invalid response structure for file: {file_name}"
+
+            normalized_data = []
+            for result in raw_json["results"]:
+                entry = {
+                    "file_type": "evaluate",
+                    "values": result  # Keep the full dictionary to preserve S/M pairs
+                }
+                normalized_data.append(entry)
+
+            return normalized_data, None
+        else:
+            file_data = response.json()
+            if file_data is None:
+                return None, f"Invalid response for file: {file_name}"
+
+            # Add file type to each entry
+            for entry in file_data:
+                if isinstance(entry, dict):
+                    entry["file_type"] = file_type
+
+            return file_data, None
+
     except requests.RequestException as e:
         return None, f"Error accessing the API for file {file_name}: {str(e)}"
 
@@ -89,9 +113,18 @@ def extract_runs_and_variables(data):
         runs.add(run)
 
         values = entry.get('values', [])
-        if values:
+
+        # Case 1: old format (.T or .OUT), list of dicts
+        if isinstance(values, list):
             for variable in values:
-                cde = variable.get('cde', 'Unknown')
-                variables.add(cde)
+                if isinstance(variable, dict):
+                    cde = variable.get('cde')
+                    if cde:
+                        variables.add(cde)
+
+        # Case 2: evaluate.out format, flat dictionary
+        elif isinstance(values, dict):
+            for key in values:
+                variables.add(key)
 
     return sorted(list(runs)), sorted(list(variables))

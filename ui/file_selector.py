@@ -158,7 +158,7 @@ class FileSelectorDialog(QDialog):
         if filter_option == "Output files":
             filtered_files = [f for f in files if get_file_type(f) == "out"]
         elif filter_option == "Alt.Output":
-            filtered_files = [f for f in files if f.endswith(".ALT")] #doesn't work, i don't know how to deal with alt.output yet.
+            filtered_files = [f for f in files if f.endswith(".ALT")]
         elif filter_option == "T-files":
             filtered_files = [f for f in files if get_file_type(f) == "t"]
         elif filter_option == "Evaluation":

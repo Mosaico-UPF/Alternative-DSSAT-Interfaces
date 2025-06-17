@@ -10,6 +10,7 @@ from .time_series_var_selection import open_time_series_var_selection
 try:
     from .time_series_var_selection import open_time_series_var_selection
     from .scatter_plot_var_selection import open_scatter_var_selection
+    from .evaluate_var_selection import open_evaluate_var_selection
     from .options_menu import OptionsDialog
 except ImportError:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,7 +36,7 @@ class MainWindow(QMainWindow):
 
         # Placeholder for graph type selection
         self.graph_type_selector = QComboBox()
-        self.graph_type_selector.addItems(["Time Series", "Scatter Plot"])
+        self.graph_type_selector.addItems(["Time Series", "Scatter Plot", "Evaluate"])
         self.graph_type_selector.setEnabled(False)  # Disabled until files are selected
         self.graph_type_selector.currentIndexChanged.connect(self.switch_graph_type)
         self.main_layout.addWidget(self.graph_type_selector)
@@ -121,6 +122,12 @@ class MainWindow(QMainWindow):
                     self.label.setText(f"Scatter Plot - Graph window opened.\nSelected Runs: {', '.join(runs)}\nX Variables: {', '.join(x_vars)}\nY Variables: {', '.join(y_vars)}")
                 else:
                     self.label.setText("Scatter Plot selection canceled.")
+            elif self.current_graph_type == "Evaluate":
+                vars, data = open_evaluate_var_selection(self.selected_files, self)
+                if vars is not None and data is not None:
+                    self.label.setText(f"Evaluate - Graph window opened.\nSelected Variables: {', '.join(vars)}")
+                else:
+                    self.label.setText("Evaluate selection canceled.")
             else:
                 self.label.setText(f"{self.current_graph_type} selection not implemented yet.")
             self.show_var_selection = False  # Reset flag after opening dialog
@@ -147,8 +154,13 @@ class MainWindow(QMainWindow):
         dialog = OptionsDialog(self)
         if dialog.exec_():
             selected_type = dialog.get_plot_type()
-            if selected_type in ["time_series", "scatter_plot"]:
-                self.current_graph_type = selected_type.replace("_", " ").title()
+            plot_type_map = {
+                "time_series": "Time Series",
+                "scatter_plot": "Scatter Plot",
+                "evaluate": "Evaluate"
+            }
+            if selected_type in plot_type_map:
+                self.current_graph_type = plot_type_map[selected_type]
                 self.graph_type_selector.setCurrentText(self.current_graph_type)
                 self.switch_graph_type()
             else:

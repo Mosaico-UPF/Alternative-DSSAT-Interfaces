@@ -298,19 +298,27 @@ class TimeSeriesVarSelectionDialog(QDialog):
                     except ValueError as e:
                         print(f"ValueError for {cde}: {e}")
                         continue
-
-        if not self.plot_data:
-            QMessageBox.warning(self, "Warning!", "No valid data to plot for the selected runs and variables.")
+        filename = self.selected_files[0] if self.selected_files else None
+        if filename is None:
+            QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
             return
 
-        # Create or update GraphWindow in the graph tab
+        #Create or update the Graph Window
         if self.graph_window:
             self.graph_window.plot_data = self.plot_data
             self.graph_window.refresh_plot()
         else:
-            self.graph_window = GraphWindow(self.plot_data, "Time Series", self.data, selected_vars, selected_runs, self)
+            self.graph_window = GraphWindow(
+                self.plot_data,
+                "Time Series",
+                self.data,
+                selected_vars,
+                selected_runs,
+                filename,
+                self
+            )
             self.graph_layout.addWidget(self.graph_window)
-        self.tab_widget.setCurrentIndex(1)  # Switch to Graph tab
+        self.tab_widget.setCurrentIndex(1)
 
     def show_selection_tab(self):
         """Switch back to the selection tab."""

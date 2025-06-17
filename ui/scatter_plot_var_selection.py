@@ -1,4 +1,3 @@
-# C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\ui\scatter_plot.py
 import os
 import sys
 from datetime import datetime, timedelta
@@ -312,11 +311,24 @@ class ScatterVarSelectionDialog(QDialog):
             return
 
         # Create or update GraphWindow in the graph tab
+        filename = self.selected_files[0] if self.selected_files else None
+        if filename is None:
+            QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
+            return
+
         if self.graph_window:
             self.graph_window.plot_data = self.plot_data
             self.graph_window.refresh_plot()
         else:
-            self.graph_window = GraphWindow(self.plot_data, "Scatter Plot", self.data, selected_x_vars + selected_y_vars, selected_runs, self)
+            self.graph_window = GraphWindow(
+                self.plot_data,
+                "Scatter Plot",
+                self.data,
+                selected_x_vars + selected_y_vars,
+                selected_runs,
+                filename,
+                self
+            )
             self.graph_layout.addWidget(self.graph_window)
         self.tab_widget.setCurrentIndex(1)  # Switch to Graph tab
 
