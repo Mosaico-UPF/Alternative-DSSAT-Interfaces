@@ -25,7 +25,6 @@ def sane(v):
 
 
 def get_content_by_profile_id(sol_path: Path | str, code: str) -> str:
-    """Extrai o bloco-texto referente ao perfil *code* (inclui cabeçalhos)."""
     """Extracts the text-block refering to the profile *code* (includes headers)."""
     sol_path = Path(sol_path)
     content = sol_path.read_text(encoding="utf-8")

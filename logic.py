@@ -232,7 +232,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if profiles:
                 # Extract the code from each profile for exibition
                 message = "\n\n".join(
-                f"Perfil: {profile['code']}\n{profile['content']}" for profile in profiles
+                f"Profile: {profile['code']}\n{profile['content']}" for profile in profiles
             )
                 #QMessageBox.information(self, "Soil profiles", f"Found profiles:\n{message}")
             else:
@@ -543,10 +543,10 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             self._write_profile(pid, sol_path)
         except Exception as e:
-            QMessageBox.critical(self, "Falha", f"Não foi possível gravar o perfil:\n{e}")
+            QMessageBox.critical(self, "Failed", f"it was not possible to save the profile:\n{e}")
             return
 
-        QMessageBox.information(self, "Pronto!", "Perfil gravado com sucesso.")
+        QMessageBox.information(self, "Done!", "profile saved successfully.")
         self.ui.stackedWidget.setCurrentIndex(0)      # returns to main screend
 
     def handlePage3Cancel(self):
