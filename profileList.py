@@ -62,8 +62,8 @@ class ProfileListDialog(QDialog):
     def accept(self):
         item = self.ui.listWidget.currentItem()
         if not item:
-            QtWidgets.QMessageBox.warning(self, "Seleção inválida",
-                                          "Escolha um perfil primeiro.")
+            QtWidgets.QMessageBox.warning(self, "Invalid Selection",
+                                          "First, chose a profile.")
             return
         self.selected_profile = item.data(Qt.UserRole)
         self.selected_code = self.selected_profile["code"]

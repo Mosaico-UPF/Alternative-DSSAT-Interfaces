@@ -1,13 +1,10 @@
-# ---------------------------------------------------------------
-#  Coloque dentro da classe MainWindow (logic.py)
-# ---------------------------------------------------------------
 def calculateMissingValues(self) -> None:
     tw = self.tableCalc
     n_rows = tw.rowCount()
 
-    # 1)  percorre linha a linha -----------------------------------
+    # 1)  line parsing -----------------------------------
     for r in range(n_rows):
-        # Leitura segura das entradas já digitadas
+        # Safe reading of the entries
         def f(col) -> float | None:
             item = tw.item(r, col)
             if not item:
@@ -18,7 +15,7 @@ def calculateMissingValues(self) -> None:
             except Exception:
                 return None
 
-        depth = f(0)   # só para referência — não será calculado
+        depth = f(0)   # only for reference, not calculated
         clay  = f(1)
         silt  = f(2)
         stones= f(3)

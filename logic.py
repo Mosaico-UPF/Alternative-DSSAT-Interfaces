@@ -24,7 +24,7 @@ def drainage_class(dr_val: float | None) -> str:
     if dr_val is None or dr_val < 0:
         return ""
 
-    # tabela em ordem crescente
+    # Table in crescent values
     table = [
         ("Very Poorly",        0.01),
         ("Poorly",             0.05),
@@ -36,9 +36,9 @@ def drainage_class(dr_val: float | None) -> str:
         ("Very Excessive",     0.95),
     ]
     for label, val in table:
-        if dr_val <= val + 1e-6:      # primeiro valor ≥ SLDR
+        if dr_val <= val + 1e-6:      # First value ≥ SLDR
             return label
-    return "Very Excessive"           # SLDR maior que 0.95
+    return "Very Excessive"           # SLDR bigger than 0.95
 
 class MainWindow(QtWidgets.QMainWindow):
     
@@ -73,18 +73,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fileStatusAction = QtWidgets.QAction("", self)
         self.fileStatusAction.setEnabled(False)
         mb = self.menuBar()
-        assert mb is not None, "menuBar não inicializado"
+        assert mb is not None, "menuBar wasn't initialized"
         mb.addAction(self.fileStatusAction)
         mb.setStyleSheet("QMenuBar::item:disabled { color: black; }")
 
     def addLayer(self) -> None:
         """Adiciona uma nova camada (+ 5 cm) sincronizando TODAS as grades."""
-        tw1 = self.ui.tableWidget          # grade principal
+        """Adds a new layer (+ 5 cm) synchronizing all the grids"""
+        tw1 = self.ui.tableWidget          # main grid
         tw2 = self.ui.tableWidget_2        # “More inputs”
         tw3 = self.tableCalc               # “Calculate/Edit Soil Parameters”
-        r   = tw1.rowCount()               # índice da nova linha
+        r   = tw1.rowCount()               # indexes for the new line
 
-        # ── profundidade -------------------------------------------------------
+        # ── depth -------------------------------------------------------
         if r == 0:
             depth_val = 5
         else:
@@ -93,18 +94,18 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 depth_val = 5
 
-        # ── insere linha nas três tabelas -------------------------------------
+        # ── inserts line in the three tables -------------------------------------
         for tw in (tw1, tw2, tw3):
             tw.insertRow(r)
             tw.setItem(r, 0, QTableWidgetItem(str(depth_val)))
 
-        # coluna “Master horizon” (grade principal) com default –99
+        # column “Master horizon” (main grid) with default –99
         tw1.setItem(r, 1, QTableWidgetItem("-99"))
 
         self.checkButton()
 
     def preview(self):
-        # implementar
+        # TODO
         pass
 
     def cleanFields(self):
@@ -118,10 +119,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.soilClassification_line.clear()
 
     def populateFieldsFromProfile(self, profile: dict) -> None:
-        # ─── caminho do .SOL + código ─────────────────────────────────
+        # ─── .SOL path + code ─────────────────────────────────
         sol0 = self.getCurrentSolFile()
         if sol0 is None:
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning!", "No .SOL file opened")
             return
         sol: str = sol0
         code = profile["code"]
@@ -165,43 +166,44 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.fertilityFactor_line.setText(data["fertility_factor"])
 
         # === Surface-parameter widgets na aba “Calculate/Edit” =======
-        # ajuste os nomes se seus QLineEdits forem diferentes
+        # adjust the names accordingly
         self.ui.lineEdit.setText(data["runoff_curve"])       # SLRO
         self.ui.lineEdit_2.setText(data["albedo"])           # SALB
         self.ui.lineEdit_3.setText(data["drainage_rate"])    # SLDR
 
-        # === Layers tables (principal + more-inputs + calculate) =====
+        # === Layers tables (main + more-inputs + calculate) =====
         tw_main = self.ui.tableWidget
         tw_more = self.ui.tableWidget_2
-        tw_calc = self.tableCalc          # grade da aba “Calculate/Edit”
+        tw_calc = self.tableCalc          # tab grid “Calculate/Edit”
 
-        # limpa todas
+        # clears all
         for tw in (tw_main, tw_more, tw_calc):
             tw.setRowCount(0)
 
-        # ordem exata das colunas de cada grade -----------------------
+        # exact order of the columns in the grid -----------------------
         main_keys = ["depth", "texture", "clay", "silt",
                     "stones", "oc", "ph", "cec", "tn"]
 
         # grade de cálculo – todas as colunas já existentes no .ui
+        # Calc Grid - All existing rows from the .ui
         calc_keys = ["depth", "clay", "silt", "stones",
                     "lll", "dul", "sat", "bd", "ksat", "srgf"]
 
         for layer in data.get("layers", []):
             r = tw_main.rowCount()
 
-            # cria linha nas três grades
+            # creates lines in the three grids
             for tw in (tw_main, tw_more, tw_calc):
                 tw.insertRow(r)
 
-            # ── grade principal ---------------------------------------
+            # ── main grid ---------------------------------------
             for c, k in enumerate(main_keys):
                 tw_main.setItem(r, c, QTableWidgetItem(layer.get(k, "")))
 
-            # ── more-inputs: apenas profundidade (espelhada) ----------
+            # ── more-inputs: only depth (mirrored) ----------
             tw_more.setItem(r, 0, QTableWidgetItem(layer.get("depth", "")))
-
-            # ── grade de cálculo (todos os parâmetros) ----------------
+ 
+            # ── Calc Grid (all the parameters) ----------
             for c, k in enumerate(calc_keys):
                 tw_calc.setItem(r, c, QTableWidgetItem(layer.get(k, "")))
 
@@ -211,30 +213,30 @@ class MainWindow(QtWidgets.QMainWindow):
         options = QFileDialog.Options()
         file_name, _ = QFileDialog.getOpenFileName(
             self,
-            "Abrir arquivo .SOL para leitura de perfis",
+            "Opens the .SOL for reading the profiles",
             "",
-            "Arquivos DSSAT (*.SOL);;Todos os arquivos (*)",
+            "DSSAT Files (*.SOL);;All the files (*)",
             options=options
         )
         if file_name:
             self.setCurrentSolFile(file_name)
             self.fileStatusAction.setText(os.path.basename(file_name))
         if not file_name:
-            return  # Usuário cancelou
+            return  # User cancelled
         else: 
             self.setCurrentSolFile(file_name)
         try:
-            # Chama show_profiles para extrair os perfis do arquivo selecionado
-            profiles = show_profiles(file_name)  # Retorna uma lista de dicionários
+            # Calls show_profiles to extract the profiles from the selected file
+            profiles = show_profiles(file_name)  # Returns a list of dictionaries
 
             if profiles:
-                # Extrai o código de cada perfil para exibição
+                # Extract the code from each profile for exibition
                 message = "\n\n".join(
                 f"Perfil: {profile['code']}\n{profile['content']}" for profile in profiles
             )
-                #QMessageBox.information(self, "Perfis de Solo", f"Perfis encontrados:\n{message}")
+                #QMessageBox.information(self, "Soil profiles", f"Found profiles:\n{message}")
             else:
-                QMessageBox.information(self, "Perfis de Solo", "Nenhum perfil encontrado no arquivo.")
+                QMessageBox.information(self, "Soil Profiles", "No profile found in the file.")
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao ler o arquivo:\n{e}")
     
@@ -245,22 +247,22 @@ class MainWindow(QtWidgets.QMainWindow):
     def getCurrentSolFile(self) -> Optional[str]:
         return self.currentSolFile
     
-    # ↓ cole dentro da classe MainWindow (fora de qualquer outro método) ─────
-# -----------------------------------------------------------------------
+
+
     def _collect_layers(self) -> list[dict]:
-        """Lê TODAS as linhas da grade principal e devolve [{SLB, SLLL, …}, …]."""
+        """Reads all the lines from the main grid and returns [{SLB, SLLL, ...}...]."""
         tw_main = self.ui.tableWidget
         tw_calc = self.tableCalc
 
         layers: list[dict] = []
         for r in range(tw_main.rowCount()):
-            try:  # profundidade é obrigatória
+            try:  # depth isn't optional
                 slb = int(tw_main.item(r, 0).text())
             except Exception:
-                continue     # pula linhas vazias
+                continue     # skips empty lines
 
             layer = {
-                # básicos (grade principal) -------------------------------
+                # basics (main grid) -------------------------------
                 "slb":  slb,
                 "slmh":   tw_main.item(r, 1).text()  if tw_main.item(r, 1)  else "-99",
                 "slcl":   tw_main.item(r, 2).text()  if tw_main.item(r, 2)  else -99,
@@ -270,7 +272,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 "slhw":   tw_main.item(r, 6).text()  if tw_main.item(r, 6)  else -99,
                 "scec":   tw_main.item(r, 7).text()  if tw_main.item(r, 7)  else -99,
                 "slni":   tw_main.item(r, 8).text()  if tw_main.item(r, 8)  else -99,
-                # hidráulicos (grade cálculo) ----------------------------
+                # hydraulics (main grid) ----------------------------
                 "slll":   tw_calc.item(r, 4).text()  if tw_calc.item(r, 4)  else -99,
                 "sdul":   tw_calc.item(r, 5).text()  if tw_calc.item(r, 5)  else -99,
                 "ssat":   tw_calc.item(r, 6).text()  if tw_calc.item(r, 6)  else -99,
@@ -283,14 +285,15 @@ class MainWindow(QtWidgets.QMainWindow):
     # -----------------------------------------------------------------------
     def _write_profile(self, profile_id: str, sol_path: Optional[Path]) -> None:
         """
-        Decide entre criar novo arquivo, anexar novo perfil ou atualizar perfil
-        existente, de acordo com o estado atual da UI.
+        Decides between creating a new file, anexing a new profile or updating the existing 
+        profile, according to the current UI state
+
         """
         layers = self._collect_layers()
         if not layers:
             raise ValueError("Tabela de camadas vazia.")
 
-        # --- cabeçalho ---------------------------------------------------
+        # --- Header ---------------------------------------------------
         kwargs = dict(
             profile_id          = profile_id,
             site                = self.ui.siteName_line.text()         or "-99",
@@ -308,48 +311,48 @@ class MainWindow(QtWidgets.QMainWindow):
                                 "Red":"R","Yellow":"Y"}.get(self.ui.color_box.currentText(),"BN"),
         )
 
-        if sol_path is None:             # 1) novo arquivo
+        if sol_path is None:             # 1) new file
             dest = QFileDialog.getSaveFileName(self,
-                                            "Salvar novo arquivo .SOL",
+                                            "Save new .SOL file",
                                             f"{profile_id}.SOL",
-                                            "Arquivos DSSAT (*.SOL)")[0]
-            if not dest:  # cancelado
+                                            "DSSAT Files (*.SOL)")[0]
+            if not dest:  # canceled
                 return
             build_soil_file(dest=dest, **kwargs)
 
-        elif self.currentProfile is None:    # 2) arquivo aberto + sem perfil selecionado
+        elif self.currentProfile is None:    # 2) opened file + no selected profile
             tmp = Path(sol_path).with_suffix(".SOL")
-            build_soil_file(dest=tmp, **kwargs)       # gera bloco sozinho
-            # anexa ao final preservando cabeçalho
+            build_soil_file(dest=tmp, **kwargs)       # generates the block alone
+            # anexes at the end, maintaining the header
             original = Path(sol_path).read_text(encoding="utf-8")
-            new      = tmp.read_text(encoding="utf-8").splitlines()[2:]  # tira 2 linhas de cabeçalho
+            new      = tmp.read_text(encoding="utf-8").splitlines()[2:]  # removes 2 header lines
             with open(sol_path, "a", encoding="utf-8") as f:
                 f.write("\n" + "\n".join(new))
             tmp.unlink()
 
-        else:                               # 3) atualizar perfil existente
+        else:                               # 3) update the existing profile
             update_soil_file(sol_path, self.currentProfile["code"], kwargs|{"layers":layers})
     # -----------------------------------------------------------------------
         
     def openProfileList(self):
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning", "No .SOL opened.")
             return
 
         profiles = show_profiles(sol)
         dlg = ProfileListDialog(profiles, self)
         if dlg.exec_() == QDialog.Accepted and dlg.selected_profile:
             self.currentProfile = dlg.selected_profile
-            assert self.currentProfile is not None, "Selecione um perfil primeiro"
+            assert self.currentProfile is not None, "Select a profile first"
             self.populateFieldsFromProfile(self.currentProfile)
 
     def writeSolFile(self):
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto para edição.")
+            QMessageBox.warning(self, "Warning", "No .SOL opened for editing.")
             return
-        assert self.currentProfile, "Selecione um perfil primeiro"
+        assert self.currentProfile, "First, select a profile"
         self.populateFieldsFromProfile(self.currentProfile)
 
         code = self.currentProfile["code"]
@@ -379,34 +382,34 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             update_soil_file(sol, code, data)
             QMessageBox.information(self, "OK",
-                f"Perfil de solo '{code}' atualizado com sucesso em «{sol}».")
+                f"Soil profile '{code}' Updated successfully «{sol}».")
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao salvar:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed saving:\n{e}")
     
     # ---------------------------------------------------------------
     def askDeleteProfile(self):                                     # ADD
-        """Abre a lista de perfis, pergunta qual excluir e faz a remoção."""
+        """Opens the profile list, asks which one should be excluded and removes"""
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning!", "No .SOL opened.")
             return
 
         profiles = show_profiles(sol)
         if not profiles:
-            QMessageBox.information(self, "Aviso", "Arquivo sem perfis.")
+            QMessageBox.information(self, "Warning!", "File opened without profiles.")
             return
 
-        # mesmo diálogo usado em editar
+        # Using the same dialog as Edit
         dlg = ProfileListDialog(profiles, self)
-        dlg.setWindowTitle("Escolha o perfil para EXCLUIR")
+        dlg.setWindowTitle("Select a file to delete")
         if dlg.exec_() != QDialog.Accepted or not dlg.selected_profile:
             return
 
         code = dlg.selected_profile["code"]
         if QMessageBox.question(
                 self,
-                "Confirmar exclusão",
-                f"Remover o perfil '{code}' de {os.path.basename(sol)}?",
+                "Confirm deletion",
+                f"Remove the profile '{code}' from {os.path.basename(sol)}?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No) != QMessageBox.Yes:
             return
@@ -414,21 +417,21 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             delete_soil_profile(sol, code)
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao excluir:\n{e}")
+            QMessageBox.critical(self, "Error", f"Failed to delete:\n{e}")
             return
 
-        # limpa UI se o perfil exibido era o apagado
+        # Clears the UI if the profile exibited was the deleted
         if self.currentProfile and self.currentProfile.get("code") == code:
             self.currentProfile = None
             self.cleanFields()
 
-        QMessageBox.information(self, "OK", f"Perfil '{code}' removido.")
+        QMessageBox.information(self, "OK", f"Profile '{code}' was deleted.")
     # ---------------------------------------------------------------
 
     def _prepare_combo(self, combo: QComboBox):
         combo.setEditable(False)       
         combo.setInsertPolicy(QComboBox.NoInsert)   
-        combo.setCurrentIndex(-1)       # nenhum item selecionado → caixa vazia
+        combo.setCurrentIndex(-1)       # no selected item -> Empty box
 
     def _load_layers(self, layers):
         self.ui.tableWidget.setRowCount(0)
@@ -450,12 +453,12 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         rows = [idx.row() for idx in sm.selectedRows()]
 
-        if rows:  # Se houver linhas selecionadas
+        if rows:  # If there are selected lines
             rows.sort(reverse=True)
             for row in rows:
                 self.ui.tableWidget.removeRow(row)
                 self.ui.tableWidget_2.removeRow(row)
-        else:  # Nenhuma linha selecionada — remove a última
+        else:  # No line selected, removes the last
             last_row = self.ui.tableWidget.rowCount() - 1
             if last_row >= 0:
                 self.ui.tableWidget.removeRow(last_row)
@@ -517,24 +520,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def handlePage3Ok(self):
         """
-        Último botão OK.
-        Decide criar / anexar / atualizar perfil *.SOL* conforme:
-            1) nenhum arquivo aberto  → criar novo .SOL
-            2) arquivo aberto sem perfil selecionado → anexar
-            3) arquivo + perfil selecionado → atualizar
+        Last ok button.
+        Decides create / annex / update profile *.SOL* according:
+            1) no opened file  → create new .SOL
+            2) file opened, no selected profile → annex
+            3) file + selected profile → update
         """
         sol_path = Path(self.currentSolFile) if self.currentSolFile else None
 
-        # Pede ID do perfil (10 chars)
+        # Asks for profile id (10 Chars)
         pid, ok = QtWidgets.QInputDialog.getText(
             self, "Profile ID",
-            "Informe o código do novo perfil (10 caracteres):",
+            "Inform the new profile ID (10 Characters):",
             text=self.currentProfile["code"] if self.currentProfile else "")
         if not ok:
             return
         pid = pid.strip().upper()
         if len(pid) != 10:
-            QMessageBox.warning(self, "Erro", "O código deve ter exatamente 10 caracteres.")
+            QMessageBox.warning(self, "Error", "The code must have 10 characters.")
             return
 
         try:
@@ -544,22 +547,22 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         QMessageBox.information(self, "Pronto!", "Perfil gravado com sucesso.")
-        self.ui.stackedWidget.setCurrentIndex(0)      # volta p/ tela inicial
+        self.ui.stackedWidget.setCurrentIndex(0)      # returns to main screend
 
     def handlePage3Cancel(self):
         self.ui.stackedWidget.setCurrentIndex(2)
     
     def openSoilFile(self):
         options = QFileDialog.Options()
-        file_name, _ = QFileDialog.getOpenFileName(self, "Abrir Arquivo .SOL", "", "Arquivos DSSAT (*.SOL);;Todos os arquivos (*)", options=options)
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open the .SOL file", "", "DSSAT files (*.SOL);;All the files (*)", options=options)
     
         if file_name:
             try:
                 with open(file_name, "r", encoding="utf-8") as f:
                     content = f.read()
-                    QMessageBox.information(self, "Arquivo Aberto", f"Conteúdo do arquivo:\n\n{content[:500]}...\n\n(Truncado)")
+                    QMessageBox.information(self, "Opened file", f"File content:\n\n{content[:500]}...\n\n(Truncated)")
             except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Não foi possível abrir o arquivo:\n{str(e)}")
+                QMessageBox.critical(self, "Error", f"It was not possible to open the file:\n{str(e)}")
 
 from PyQt5.QtWidgets import QDialog
 from profileList import Ui_Dialog

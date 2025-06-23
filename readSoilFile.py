@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Leitura de perfis *.SOL* com DSSATTools 3.x
+Profile reading *.SOL* com DSSATTools 3.x
 ------------------------------------------
 read_profile(path, code) → dict pronto p/ preencher a UI
 show_profiles(path)      → lista de {code, content}
@@ -16,7 +16,7 @@ MISSING = {None, "nan", "NaN"}
 
 
 def sane(v):
-    """Converte «coisa» em string limpa, sem -99/NaN."""
+    """Converts «element» into a clean string, without -99/NaN."""
     if v in MISSING or (isinstance(v, float) and v != v):
         return ""
     if isinstance(v, (int, float)) and float(v).is_integer():
@@ -26,16 +26,17 @@ def sane(v):
 
 def get_content_by_profile_id(sol_path: Path | str, code: str) -> str:
     """Extrai o bloco-texto referente ao perfil *code* (inclui cabeçalhos)."""
+    """Extracts the text-block refering to the profile *code* (includes headers)."""
     sol_path = Path(sol_path)
     content = sol_path.read_text(encoding="utf-8")
     for blk in re.split(r"\*+", content):
         if blk.strip().startswith(code):
             return blk
-    raise ValueError(f"Perfil {code} não encontrado")
+    raise ValueError(f"Profile {code} not found")
 
 
 def show_profiles(sol_path: Path | str) -> list[dict]:
-    """Lista códigos existentes no .SOL (para mostrar ao usuário)."""
+    """Lists the existing codes present in the .SOL (to show to the user)"""
     sol_path = Path(sol_path)
     content = sol_path.read_text(encoding="utf-8")
     out = []
@@ -47,11 +48,11 @@ def show_profiles(sol_path: Path | str) -> list[dict]:
     return out
 
 
-NUM_RE = re.compile(r"-?\d+(?:\.\d+)?$")      # inteiro ou decimal opcional ±
+NUM_RE = re.compile(r"-?\d+(?:\.\d+)?$")      # int or float, optional ±
 
 # ----------------------------------------------------------------------
 def read_profile(path: str | Path, code: str) -> dict:
-    """Lê um perfil *.SOL* (DSSAT) e devolve TUDO que a interface precisa."""
+    """Reads a profile *.SOL* (DSSAT) and returns all that the UI needs"""
 
     path = Path(path)
     prof = SoilProfile.from_file(code, path)
@@ -72,19 +73,19 @@ def read_profile(path: str | Path, code: str) -> dict:
                     elif not lon: lon = tok; break
             break
 
-    # ── cabeçalho simples --------------------------------------------
+    # ── Simple header --------------------------------------------
     drainage = sane(g("sldr"))
     runoff   = sane(g("slro"))
     scom     = g("scom")
     color_code = "BN" if str(scom).strip() in {"", "-99", "nan", "NaN"} else str(scom).strip()
 
-    # ── utilitário: garante sempre list[str] -------------------------
+    # ── utilitarian: Guarantees always list[str] -------------------------
     def as_list(x):
         if x in ("", None):                     return []
         if isinstance(x, (list, tuple, np.ndarray)): return list(x)
         return [x]
 
-    # listas “normais” ------------------------------------------------
+    # "normal" lists ------------------------------------------------
     slb  = as_list(g("slb"))     # depth (cm)
     slmh = as_list(g("slmh"))    # master horizon
     slcl = as_list(g("slcl"))    # clay  %
@@ -95,7 +96,7 @@ def read_profile(path: str | Path, code: str) -> dict:
     scec = as_list(g("scec"))    # CEC
     slni = as_list(g("slni"))    # total N %
 
-    # *novas* listas para a grade de cálculo --------------------------
+    # *new* lists for the calc grid --------------------------
     slll = as_list(g("slll"))    # lower limit (θLL)
     sdul = as_list(g("sdul"))    # drained upper limit (θDUL)
     ssat = as_list(g("ssat"))    # saturated water content (θSAT)
@@ -104,11 +105,12 @@ def read_profile(path: str | Path, code: str) -> dict:
     srgf = as_list(g("srgf"))    # root growth factor (0-1)
 
     # ── fallback: parse direto da tabela se algo estiver faltando ----
+    # ── fallback: parses directly from the table, if something is missing ----
     if not slb or not slll or not ssat:
         header = {}
         rows   = []
         for ln in blk:
-            if ln.upper().startswith("@  SLB"):              # cabeçalho
+            if ln.upper().startswith("@  SLB"):              # header
                 header = {tok.upper(): i
                           for i, tok in enumerate(ln.replace("@", "").split())}
                 continue
@@ -139,7 +141,7 @@ def read_profile(path: str | Path, code: str) -> dict:
         if not sskh: sskh = col("SSKS") or col("SSKH")
         if not srgf: srgf = col("SRGF")
 
-    # ── monta lista de camadas ---------------------------------------
+    # ── mounts the layer list ---------------------------------------
     layers = []
     n = len(slb)
     for i in range(n):
@@ -154,7 +156,7 @@ def read_profile(path: str | Path, code: str) -> dict:
             "cec":   sane(scec[i]) if i < len(scec) else "-99",
             "tn":    sane(slni[i]) if i < len(slni) else "-99",
 
-            # campos para a aba “Calculate/Edit”
+            # Fields for the "Calculate/Edit" tab
             "lll":   sane(slll[i]) if i < len(slll) else "",
             "dul":   sane(sdul[i]) if i < len(sdul) else "",
             "sat":   sane(ssat[i]) if i < len(ssat) else "",
@@ -163,7 +165,7 @@ def read_profile(path: str | Path, code: str) -> dict:
             "srgf":  sane(srgf[i]) if i < len(srgf) else "",
         })
 
-    # ── dicionário final ---------------------------------------------
+    # ── final dictionary ---------------------------------------------
     return {
         "country":             sane(g("country")),
         "site_name":           sane(g("site")),
