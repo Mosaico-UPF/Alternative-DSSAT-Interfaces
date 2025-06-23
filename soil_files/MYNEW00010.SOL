@@ -2,7 +2,7 @@
 
 *UMVA030003  -99         SLC      75 -99                                                             
 @SITE        COUNTRY          LAT     LONG SCS FAMILY
- umarya      India         23.500   80.750 FINE, HYPHERTERMIC, VERTIC USTOCHREPTS                          
+ umarya      -99           23.500   80.750 FINE, HYPHERTERMIC, VERTIC USTOCHREPTS                          
 @ SCOM  SALB  SLU1  SLDR  SLRO  SLNF  SLPF  SMHB  SMPX  SMKE
     BN  0.13   6.0  0.60    61  1.00  1.00 IB001 IB001 IB001
 @  SLB  SLMH  SLLL  SDUL  SSAT  SRGF  SSKS  SBDM  SLOC  SLCL  SLSI  SLCF  SLNI  SLHW  SLHB  SCEC  SADC

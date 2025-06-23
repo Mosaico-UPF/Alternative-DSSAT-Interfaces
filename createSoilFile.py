@@ -1,4 +1,4 @@
-# createSoilFile_full.py
+# createSoilFile.py
 from __future__ import annotations
 from pathlib import Path
 from DSSATTools.soil import SoilProfile, SoilLayer
