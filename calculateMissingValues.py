@@ -1,6 +1,3 @@
-# ---------------------------------------------------------------
-#  Coloque dentro da classe MainWindow (logic.py)
-# ---------------------------------------------------------------
 def calculateMissingValues(self) -> None:
     tw = self.tableCalc
     n_rows = tw.rowCount()
@@ -18,7 +15,7 @@ def calculateMissingValues(self) -> None:
             except Exception:
                 return None
 
-        depth = f(0)   # só para referência — não será calculado
+        depth = f(0)   # só para referência - não será calculado
         clay  = f(1)
         silt  = f(2)
         stones= f(3)
@@ -66,10 +63,3 @@ def calculateMissingValues(self) -> None:
             # fator decrescente linear até 200 cm
             rgf = max(0, 1 - depth / 200)
             tw.setItem(r, 9, QTableWidgetItem(f"{rgf:.3f}"))
-
-    # 2) avisa o usuário -------------------------------------------
-    QMessageBox.information(
-        self, "Pronto",
-        "Valores faltantes calculados (onde possível).\n"
-    )
-# ---------------------------------------------------------------

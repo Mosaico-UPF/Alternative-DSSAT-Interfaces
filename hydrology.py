@@ -7,9 +7,10 @@ Declives-padrão por coluna:   1 % | 3 % | 8 % | 15 %
 
 * :func:`slope_from_cn` devolve **sempre 1, 3, 8 ou 15** (sem interpolar).
 * :func:`cn_from_slope` devolve o CN do limite superior da coluna em que
-  o declive cai — é o valor que o SBuild gravaria se você escolhesse
+  o declive cai. É o valor que o SBuild gravaria se escolhesse
   esse declive na interface.
 """
+
 from __future__ import annotations
 
 from typing import Mapping, Sequence

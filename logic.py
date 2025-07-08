@@ -121,7 +121,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # ─── caminho do .SOL + código ─────────────────────────────────
         sol0 = self.getCurrentSolFile()
         if sol0 is None:
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning", "No .SOL file opened.")
             return
         sol: str = sol0
         code = profile["code"]
@@ -334,7 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def openProfileList(self):
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning", "No .SOL file opened.")
             return
 
         profiles = show_profiles(sol)
@@ -347,9 +347,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def writeSolFile(self):
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto para edição.")
+            QMessageBox.warning(self, "Warning", "No .SOL file opened for editing.")
             return
-        assert self.currentProfile, "Selecione um perfil primeiro"
+        assert self.currentProfile, "Select a profile first"
         self.populateFieldsFromProfile(self.currentProfile)
 
         code = self.currentProfile["code"]
@@ -388,12 +388,12 @@ class MainWindow(QtWidgets.QMainWindow):
         """Abre a lista de perfis, pergunta qual excluir e faz a remoção."""
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
-            QMessageBox.warning(self, "Aviso", "Nenhum .SOL aberto.")
+            QMessageBox.warning(self, "Warning", "No .SOL file opened.")
             return
 
         profiles = show_profiles(sol)
         if not profiles:
-            QMessageBox.information(self, "Aviso", "Arquivo sem perfis.")
+            QMessageBox.information(self, "Warning", "No profiles found")
             return
 
         # mesmo diálogo usado em editar
@@ -528,22 +528,22 @@ class MainWindow(QtWidgets.QMainWindow):
         # Pede ID do perfil (10 chars)
         pid, ok = QtWidgets.QInputDialog.getText(
             self, "Profile ID",
-            "Informe o código do novo perfil (10 caracteres):",
+            "Please enter the new profile code (10 characters):",
             text=self.currentProfile["code"] if self.currentProfile else "")
         if not ok:
             return
         pid = pid.strip().upper()
         if len(pid) != 10:
-            QMessageBox.warning(self, "Erro", "O código deve ter exatamente 10 caracteres.")
+            QMessageBox.warning(self, "Error", "The code must be exactly 10 characters long.")
             return
 
         try:
             self._write_profile(pid, sol_path)
         except Exception as e:
-            QMessageBox.critical(self, "Falha", f"Não foi possível gravar o perfil:\n{e}")
+            QMessageBox.critical(self, "Error", f"Could not save the profile:\n{e}")
             return
 
-        QMessageBox.information(self, "Pronto!", "Perfil gravado com sucesso.")
+        QMessageBox.information(self, "Done!", "Profile saved successfully.")
         self.ui.stackedWidget.setCurrentIndex(0)      # volta p/ tela inicial
 
     def handlePage3Cancel(self):
