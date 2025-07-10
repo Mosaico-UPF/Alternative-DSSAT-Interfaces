@@ -1,8 +1,10 @@
 # C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\ui\main_window.py
 import os
 from PyQt5.QtWidgets import (
-    QAction, QApplication, QMainWindow, QLabel, QMessageBox, QWidget, QVBoxLayout, QComboBox
+    QAction, QApplication, QMainWindow, QLabel, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout
 )
+from PyQt5.QtGui import QPixmap, QFont
+
 import sys
 from PyQt5.QtCore import Qt, QSize
 from .file_selector import open_file_selector
@@ -28,18 +30,32 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout.setAlignment(Qt.AlignCenter)
 
-        # Initial content
-        self.label = QLabel("Welcome to DSSAT Output Viewer", self)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(self.label)
 
-        # Placeholder for graph type selection
-        self.graph_type_selector = QComboBox()
-        self.graph_type_selector.addItems(["Time Series", "Scatter Plot", "Evaluate"])
-        self.graph_type_selector.setEnabled(False)  # Disabled until files are selected
-        self.graph_type_selector.currentIndexChanged.connect(self.switch_graph_type)
-        self.main_layout.addWidget(self.graph_type_selector)
+        # Central logo and title
+        logo_and_title_widget = QWidget()
+        logo_and_title_layout = QHBoxLayout(logo_and_title_widget)
+        logo_and_title_layout.setAlignment(Qt.AlignCenter)
+
+        # DSSAT logo
+        logo_label = QLabel()
+        pixmap = QPixmap(os.path.join(os.path.dirname(__file__), "Logo.png"))  # path to logo
+        scaled_pixmap = pixmap.scaledToHeight(140, Qt.SmoothTransformation)
+        logo_label.setPixmap(scaled_pixmap)
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_and_title_layout.addWidget(logo_label)
+
+        # GBuild text
+        text_label = QLabel("GBuild")
+        font = QFont("Arial", 40)
+        text_label.setFont(font)
+        text_label.setAlignment(Qt.AlignCenter)
+        logo_and_title_layout.addWidget(text_label)
+
+        # Add logo+title to the main layout
+        self.main_layout.addWidget(logo_and_title_widget)
+        self.label = None #Label is not being used
 
         # Placeholder for graph selection UI
         self.graph_selection_widget = QWidget()
@@ -66,16 +82,15 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
 
         # Menu Variable Selection
-        var_menu = menubar.addMenu("Variable Selection")
-        var_action = QAction("Open Variable Selection", self)
+        var_action = QAction("Variable Selection", self)
         var_action.triggered.connect(self.show_variable_selection)
-        var_menu.addAction(var_action)
+        menubar.addAction(var_action)
 
-        # Menu Options
-        options_menu = menubar.addMenu("Options")
+        # Options Menu
         options_action = QAction("Options", self)
         options_action.triggered.connect(self.show_options)
-        options_menu.addAction(options_action)
+        menubar.addAction(options_action)
+
 
         # Menu Help
         help_menu = menubar.addMenu("Help")
@@ -94,45 +109,44 @@ class MainWindow(QMainWindow):
         selected_files = open_file_selector(self)
         if selected_files:
             self.selected_files = selected_files
-            self.label.setText("Files opened:\n" + "\n".join(selected_files))
-            self.graph_type_selector.setEnabled(True)
             self.current_graph_type = "Time Series"  # Default
-            self.graph_type_selector.setCurrentText(self.current_graph_type)
             self.switch_graph_type()
         else:
-            self.label.setText("No files selected.")
-            self.graph_type_selector.setEnabled(False)
             self.clear_graph_selection()
+
+
 
     def switch_graph_type(self):
         """Switch between different graph types without opening the dialog unless requested."""
-        self.current_graph_type = self.graph_type_selector.currentText()
+        #self.current_graph_type = self.graph_type_selector.currentText()
+        #can be ignored, since the graphtype comes from Options Dialog or Default
         self.clear_graph_selection()
 
         if self.show_var_selection:
             if self.current_graph_type == "Time Series":
                 runs, vars, data = open_time_series_var_selection(self.selected_files, self)
                 if runs is not None and vars is not None:
-                    self.label.setText(f"Time Series - Graph window opened.\nSelected Runs: {', '.join(runs)}\nSelected Variables: {', '.join(vars)}")
+                    pass  
                 else:
-                    self.label.setText("Time Series selection canceled.")
+                    pass
             elif self.current_graph_type == "Scatter Plot":
                 runs, (x_vars, y_vars), data = open_scatter_var_selection(self.selected_files, self)
                 if runs and x_vars and y_vars:
-                    self.label.setText(f"Scatter Plot - Graph window opened.\nSelected Runs: {', '.join(runs)}\nX Variables: {', '.join(x_vars)}\nY Variables: {', '.join(y_vars)}")
+                    pass
                 else:
-                    self.label.setText("Scatter Plot selection canceled.")
+                    pass
             elif self.current_graph_type == "Evaluate":
                 vars, data = open_evaluate_var_selection(self.selected_files, self)
                 if vars is not None and data is not None:
-                    self.label.setText(f"Evaluate - Graph window opened.\nSelected Variables: {', '.join(vars)}")
+                    pass
                 else:
-                    self.label.setText("Evaluate selection canceled.")
+                    pass
             else:
-                self.label.setText(f"{self.current_graph_type} selection not implemented yet.")
-            self.show_var_selection = False  # Reset flag after opening dialog
+                pass
+            self.show_var_selection = False
         else:
-            self.label.setText(f"Selected graph type: {self.current_graph_type}. Click 'Variable Selection' to configure.")
+            pass
+            # print(f"Selected graph type: {self.current_graph_type}. Click 'Variable Selection' to configure.")
 
     def clear_graph_selection(self):
         """Clear the current graph selection UI."""
@@ -161,7 +175,6 @@ class MainWindow(QMainWindow):
             }
             if selected_type in plot_type_map:
                 self.current_graph_type = plot_type_map[selected_type]
-                self.graph_type_selector.setCurrentText(self.current_graph_type)
                 self.switch_graph_type()
             else:
                 QMessageBox.warning(self, "Warning", f"Plot type {selected_type} not implemented yet.")

@@ -1,4 +1,3 @@
-# C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\ui\time_series_var_selection.py
 import os
 import sys
 from datetime import datetime, timedelta
@@ -11,14 +10,16 @@ from PyQt5.QtCore import Qt
 
 # Adjust imports to handle both package and script execution
 try:
-    from data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
-    from plots.plotting import plot_time_series
-    from ui.graph_window import GraphWindow
+    from ..utils.cde_data_parser import parse_data_cde
+    from ..data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
+    from ..plots.plotting import plot_time_series
+    from ..ui.graph_window import GraphWindow
 except ImportError:
     # Add project root to sys.path
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.insert(0, project_root)
     from data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
+    from utils.cde_data_parser import parse_data_cde
     from plots.plotting import plot_time_series
     from ui.graph_window import GraphWindow
     
@@ -54,6 +55,10 @@ class TimeSeriesVarSelectionDialog(QDialog):
         self.selection_tab = QWidget()
         self.selection_layout = QVBoxLayout(self.selection_tab)
 
+        # Horizontal layout for variables and runs
+        self.content_layout = QHBoxLayout()
+
+
         # Horizontal layout for selected files display and preview button
         self.top_layout = QHBoxLayout()
         self.files_display = QListWidget()
@@ -84,21 +89,30 @@ class TimeSeriesVarSelectionDialog(QDialog):
         self.variables_group.setLayout(QVBoxLayout())
         self.variables_group.layout().addWidget(self.variables_scroll)
         self.content_layout.addWidget(self.variables_group)
+        self.selection_layout.addLayout(self.content_layout)
 
-        self.runs_group = QGroupBox("Select Runs")
+        #Runs
         self.runs_layout = QVBoxLayout()
-        self.runs_scroll = QScrollArea()
-        self.runs_scroll.setWidgetResizable(True)
+        self.runs_layout.setAlignment(Qt.AlignTop)
+
         self.runs_widget = QWidget()
         self.runs_widget.setLayout(self.runs_layout)
+
+        self.runs_scroll = QScrollArea()
+        self.runs_scroll.setWidgetResizable(True)
         self.runs_scroll.setWidget(self.runs_widget)
-        self.runs_group.setLayout(QVBoxLayout())
-        self.runs_group.layout().addWidget(self.runs_scroll)
+
+        self.runs_group = QGroupBox("Select Runs")
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(self.runs_scroll)
+        self.content_layout.addWidget(self.runs_group)
+
         self.select_all_runs = QCheckBox("Select All Runs")
         self.select_all_runs.stateChanged.connect(self.toggle_all_runs)
-        self.runs_group.layout().addWidget(self.select_all_runs)
-        self.content_layout.addWidget(self.runs_group)
-        self.selection_layout.addLayout(self.content_layout)
+        group_layout.addWidget(self.select_all_runs)
+
+        self.runs_group.setLayout(group_layout)
+
 
         # Buttons for selection tab
         self.button_layout = QHBoxLayout()
@@ -178,16 +192,37 @@ class TimeSeriesVarSelectionDialog(QDialog):
 
         print(f"Runs: {runs}, Variables: {variables}")
 
+        # Load variable mappings from DATA.CDE
+        try:
+            variable_map = parse_data_cde()
+        except FileNotFoundError as e:
+            print(f"Error loading DATA.CDE: {e}")
+            QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variable names will be displayed as acronyms.")
+            variable_map = {}
+
+        # Define headers to ignore (include DAS and its forms)
+        headers_to_ignore = {'@YEAR', 'DOY', 'DAP', 'Days after start of simulation', 'Day of Year', 'TRNO', 'DATE', 'DAS'}
+
         # Populate runs
         for run in runs:
             checkbox = QCheckBox(str(run))
+            checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            checkbox.setStyleSheet("QCheckBox { padding: 1px; margin: 0px; }")
             self.runs_layout.addWidget(checkbox)
 
-        # Populate variables
+        # Populate variables with full name (including units) and acronym, excluding headers
         for var in variables:
-            checkbox = QCheckBox(var)
+            # Check if var is an acronym or full text contains a header
+            if var in headers_to_ignore or any(header in var for header in headers_to_ignore):
+                print(f"Skipping header variable: {var}")
+                continue
+            full_name = variable_map.get(var, var)
+            if full_name == var:
+                print(f"Variable {var} not found in DATA.CDE, using acronym only.")
+            display_text = f"{full_name} ({var})" if full_name != var else var
+            checkbox = QCheckBox(display_text)
             self.variables_layout.addWidget(checkbox)
-
+                
     def clear_layout(self, layout):
         """Clear all widgets from a layout."""
         while layout.count():
@@ -213,7 +248,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
         """Reload data from the files and refresh the UI."""
         self.data, error = load_all_file_data(self.selected_files)
         if error:
-            QMessageBox.warning(self, "Error", error)
+            QMessageBox.warning(self, "Warning!", error)
         print(f"Loaded data: {self.data}")
 
     def show_graph_tab(self):
@@ -239,9 +274,11 @@ class TimeSeriesVarSelectionDialog(QDialog):
 
             for variable in entry.get('values', []):
                 cde = variable.get('cde', 'Unknown')
-                if cde in selected_vars:
+                # Match cde with selected_vars (handle both "DESCRIPTION (CDE)" and "CDE" formats)
+                if any(cde in var or f"({cde})" in var for var in selected_vars):
                     values = variable.get('values', [])
                     if not values:
+                        print(f"Warning: No values for {cde} in run {run_name}")
                         continue
 
                     try:
@@ -253,7 +290,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
                                 start_date = datetime.strptime(day_str, '%Y-%m-%d')
                                 x_values = [start_date + timedelta(days=i) for i in range(len(y_values))]
                             except (ValueError, TypeError) as e:
-                                print(f"Invalid or missing 'day' in .t file: {day_str}. Error: {e}")
+                                print(f"Invalid or missing 'day' in .t file for {run_name}: {day_str}. Error: {e}")
                                 x_values = list(range(len(y_values)))
 
                             self.plot_data.append({
@@ -277,14 +314,14 @@ class TimeSeriesVarSelectionDialog(QDialog):
                                         for y, d in zip(year_var['values'], doy_var['values'])
                                     ]
                                 except Exception as e:
-                                    print(f"Error converting YEAR+DOY to dates: {e}")
+                                    print(f"Error converting YEAR+DOY to dates for {run_name}: {e}")
                                     calendar_x = list(range(len(y_values)))
 
                             if dap_var:
                                 try:
                                     dap_x = list(map(int, dap_var['values']))
                                 except Exception as e:
-                                    print(f"Error parsing DAP values: {e}")
+                                    print(f"Error parsing DAP values for {run_name}: {e}")
                                     dap_x = list(range(len(y_values)))
                             else:
                                 dap_x = list(range(len(y_values)))
@@ -296,14 +333,16 @@ class TimeSeriesVarSelectionDialog(QDialog):
                                 'label': f'{cde} ({run_name})'
                             })
                     except ValueError as e:
-                        print(f"ValueError for {cde}: {e}")
+                        print(f"ValueError for {cde} in run {run_name}: {e}")
                         continue
+
+        print(f"Generated plot_data: {self.plot_data}")  # Debug print
         filename = self.selected_files[0] if self.selected_files else None
         if filename is None:
             QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
             return
 
-        #Create or update the Graph Window
+        # Create or update the Graph Window
         if self.graph_window:
             self.graph_window.plot_data = self.plot_data
             self.graph_window.refresh_plot()
@@ -333,9 +372,23 @@ class TimeSeriesVarSelectionDialog(QDialog):
 def open_time_series_var_selection(selected_files, parent=None):
     """Open the time series variable selection dialog and return the selections."""
     dialog = TimeSeriesVarSelectionDialog(selected_files, parent)
+    center_window_on_parent(dialog, parent)
     if dialog.exec_():
         return dialog.get_selections()
     return None, None, None
+
+def center_window_on_parent(window, parent):
+    if parent is None:
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        center = screen_geometry.center()
+    else:
+        center = parent.frameGeometry().center()
+
+    geo = window.frameGeometry()
+    geo.moveCenter(center)
+    window.move(geo.topLeft())
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

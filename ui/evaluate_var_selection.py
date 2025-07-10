@@ -141,13 +141,32 @@ class EvaluateVarSelectionDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Could not preview the file:\n{str(e)}")
 
     def display_data(self):
-        """Display the variable checkboxes based on the current data."""
+        """Display the variable checkboxes using full names from DATA.CDE."""
+        # Clear existing layout and widgets
         self.clear_layout(self.variables_layout)
-
+        
+        # Recreate the widget and layout to ensure a clean slate
+        self.variables_widget = QWidget()
+        self.variables_layout = QVBoxLayout(self.variables_widget)
+        self.variables_scroll.setWidget(self.variables_widget)
+        
         if not self.data:
+            label = QLabel("No data available (using mock data or API down).")
+            self.variables_layout.addWidget(label, alignment=Qt.AlignLeft)
+            self.variables_layout.addStretch()
             return
 
         _, variables = extract_runs_and_variables(self.data)
+        print(f"All variables from data: {variables}")
+
+        try:
+            from utils.cde_data_parser import parse_data_cde
+            variable_map = parse_data_cde()
+            print(f"Variable map: {variable_map}")
+        except Exception as e:
+            print(f"Failed to load DATA.CDE: {e}")
+            QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variables will be displayed as acronyms.")
+            variable_map = {}
 
         seen = set()
         unique_vars = []
@@ -155,19 +174,28 @@ class EvaluateVarSelectionDialog(QDialog):
             if var not in seen:
                 unique_vars.append(var)
                 seen.add(var)
+        print(f"Unique variables: {unique_vars}")
 
-        self.variables_layout = QVBoxLayout()
-        self.variables_widget = QWidget()
-        self.variables_widget.setLayout(self.variables_layout)
-
+        # Add checkboxes for each unique variable
         for var in unique_vars:
-            checkbox = QCheckBox(var)
-            self.variables_layout.addWidget(checkbox)
+            full_name = variable_map.get(var, var)
+            # Handle potentially problematic descriptions
+            if not full_name or full_name.strip() == '':
+                full_name = var  # Fallback to acronym if description is empty
+            display_text = f"{full_name} ({var})" if full_name != var else var
+            checkbox = QCheckBox(display_text)
+            checkbox.setObjectName(f"checkbox_{var}")  # Unique identifier for debugging
+            checkbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            checkbox.setMinimumWidth(400)
+            checkbox.setStyleSheet("QCheckBox { padding: 5px; margin: 2px; }")
+            self.variables_layout.addWidget(checkbox, alignment=Qt.AlignLeft)
+            print(f"Added checkbox for: {display_text} (objectName: checkbox_{var})")
 
         self.variables_layout.addStretch()
-        self.variables_scroll.setWidget(self.variables_widget)
-
-
+        # Force layout update
+        self.variables_widget.update()
+        self.variables_scroll.update()
+        
     def clear_layout(self, layout):
         if layout is None:
             return
@@ -198,7 +226,15 @@ class EvaluateVarSelectionDialog(QDialog):
 
     def show_graph_tab(self):
         """Prepare plot data and switch to the graph tab."""
-        selected_vars = [checkbox.text() for checkbox in self.variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
+        selected_vars = []
+        for checkbox in self.variables_widget.findChildren(QCheckBox):
+            if checkbox.isChecked():
+                text = checkbox.text()
+                if '(' in text and ')' in text:
+                    cde = text.split('(')[-1].split(')')[0].strip()
+                else:
+                    cde = text.strip()
+                selected_vars.append(cde)
 
         if not self.data:
             QMessageBox.warning(self, "Warning!", "No data available to create a graph (using mock data or API down).")
@@ -275,9 +311,22 @@ class EvaluateVarSelectionDialog(QDialog):
 def open_evaluate_var_selection(selected_files, parent=None):
     """Open the evaluate variable selection dialog and return the selections."""
     dialog = EvaluateVarSelectionDialog(selected_files, parent)
+    center_window_on_parent(dialog, parent)
     if dialog.exec_():
         return dialog.get_selections()
     return None, None
+
+def center_window_on_parent(window, parent):
+    if parent is None:
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        center = screen_geometry.center()
+    else:
+        center = parent.frameGeometry().center()
+
+    geo = window.frameGeometry()
+    geo.moveCenter(center)
+    window.move(geo.topLeft())
 
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication

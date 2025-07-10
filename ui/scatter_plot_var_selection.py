@@ -9,12 +9,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 
 try:
-    from data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
-    from ui.graph_window import GraphWindow
+    from ..utils.cde_data_parser import parse_data_cde
+    from ..data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
+    from ..ui.graph_window import GraphWindow
 except ImportError:
-    # Add project root to sys.path
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.insert(0, project_root)
+    from utils.cde_data_parser import parse_data_cde
     from data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
     from ui.graph_window import GraphWindow
 
@@ -95,15 +96,20 @@ class ScatterVarSelectionDialog(QDialog):
         self.content_layout.addWidget(self.y_variables_group)
 
         # Runs selection
-        self.runs_group = QGroupBox("Select Run(s)")
         self.runs_layout = QVBoxLayout()
-        self.runs_scroll = QScrollArea()
-        self.runs_scroll.setWidgetResizable(True)
+        self.runs_layout.setAlignment(Qt.AlignTop)
         self.runs_widget = QWidget()
         self.runs_widget.setLayout(self.runs_layout)
+        self.runs_scroll = QScrollArea()
+        self.runs_scroll.setWidgetResizable(True)
         self.runs_scroll.setWidget(self.runs_widget)
-        self.runs_group.setLayout(QVBoxLayout())
-        self.runs_group.layout().addWidget(self.runs_scroll)
+        self.runs_group = QGroupBox("Select Run(s)")
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(self.runs_scroll)
+        self.select_all_runs = QCheckBox("Select All Runs")
+        self.select_all_runs.stateChanged.connect(self.toggle_all_runs)
+        group_layout.addWidget(self.select_all_runs)
+        self.runs_group.setLayout(group_layout)
         self.content_layout.addWidget(self.runs_group)
 
         self.selection_layout.addLayout(self.content_layout)
@@ -188,20 +194,37 @@ class ScatterVarSelectionDialog(QDialog):
 
         print(f"Runs: {runs}, Variables: {variables}")
 
-        # Populate runs with checkboxes (multiple selection allowed)
+        # Load variable mappings from DATA.CDE
+        try:
+            variable_map = parse_data_cde()
+        except FileNotFoundError as e:
+            print(f"Error loading DATA.CDE: {e}")
+            QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variable names will be displayed as acronyms.")
+            variable_map = {}
+
+        # Define headers to ignore
+        headers_to_ignore = {'@YEAR', 'DOY', 'DAP', 'Days after start of simulation', 'Day of Year', 'TRNO', 'DATE', 'DAS'}
+
+        # Populate runs
         for run in runs:
             checkbox = QCheckBox(str(run))
+            checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            checkbox.setStyleSheet("QCheckBox { padding: 1px; margin: 0px; }")
             self.runs_layout.addWidget(checkbox)
 
-        # Populate X-axis variables with checkboxes
+        # Populate X and Y variables with full name (including units) and acronym
         for var in variables:
-            checkbox = QCheckBox(var)
-            self.x_variables_layout.addWidget(checkbox)
-
-        # Populate Y-axis variables with checkboxes
-        for var in variables:
-            checkbox = QCheckBox(var)
-            self.y_variables_layout.addWidget(checkbox)
+            if var in headers_to_ignore or any(header in var for header in headers_to_ignore):
+                print(f"Skipping header variable: {var}")
+                continue
+            full_name = variable_map.get(var, var)
+            if full_name == var:
+                print(f"Variable {var} not found in DATA.CDE, using acronym only.")
+            display_text = f"{full_name} ({var})" if full_name != var else var
+            x_checkbox = QCheckBox(display_text)
+            y_checkbox = QCheckBox(display_text)
+            self.x_variables_layout.addWidget(x_checkbox)
+            self.y_variables_layout.addWidget(y_checkbox)
 
     def clear_layout(self, layout):
         """Clear all widgets from a layout."""
@@ -209,8 +232,13 @@ class ScatterVarSelectionDialog(QDialog):
             item = layout.takeAt(0)
             widget = item.widget()
             if widget:
-                widget.setParent(None)  # Properly remove widget from parent
+                widget.setParent(None)
                 widget.deleteLater()
+
+    def toggle_all_runs(self, state):
+        """Toggle all run checkboxes based on the Select All Runs checkbox."""
+        for checkbox in self.runs_widget.findChildren(QCheckBox):
+            checkbox.setChecked(state == Qt.Checked)
 
     def clear_all(self):
         """Clear all selections for variables and runs."""
@@ -220,6 +248,7 @@ class ScatterVarSelectionDialog(QDialog):
             checkbox.setChecked(False)
         for checkbox in self.runs_widget.findChildren(QCheckBox):
             checkbox.setChecked(False)
+        self.select_all_runs.setChecked(False)
 
     def reload_data(self):
         """Reload data from the files and refresh the UI."""
@@ -231,32 +260,27 @@ class ScatterVarSelectionDialog(QDialog):
 
     def show_graph_tab(self):
         """Prepare plot data and switch to the graph tab."""
-        # Get selected runs
         selected_runs = [checkbox.text() for checkbox in self.runs_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         if not selected_runs:
             QMessageBox.warning(self, "Warning!", "Please select at least one run.")
             return
 
-        # Get selected X-axis variables
         x_checkboxes = self.x_variables_widget.findChildren(QCheckBox)
         selected_x_vars = [checkbox.text() for checkbox in x_checkboxes if checkbox.isChecked()]
         if not selected_x_vars:
             QMessageBox.warning(self, "Warning!", "Please select at least one X-axis variable.")
             return
 
-        # Get selected Y-axis variables
         y_checkboxes = self.y_variables_widget.findChildren(QCheckBox)
         selected_y_vars = [checkbox.text() for checkbox in y_checkboxes if checkbox.isChecked()]
         if not selected_y_vars:
             QMessageBox.warning(self, "Warning!", "Please select at least one Y-axis variable.")
             return
 
-        # Validation
         if not self.data:
             QMessageBox.warning(self, "Warning!", "No data available to create a graph (using mock data or API down).")
             return
 
-        # Prepare plot data
         self.plot_data = []
         is_tfile = any(entry.get("file_type") == "t" for entry in self.data)
 
@@ -264,8 +288,10 @@ class ScatterVarSelectionDialog(QDialog):
             for x_var in selected_x_vars:
                 for y_var in selected_y_vars:
                     if x_var == y_var:
-                        continue  # Skip if X and Y variables are the same
-
+                        continue
+                    # Extract cde from display text (e.g., "Full Name (CDE)" -> CDE)
+                    x_cde = x_var.split('(')[-1].strip(')') if '(' in x_var else x_var
+                    y_cde = y_var.split('(')[-1].strip(')') if '(' in y_var else y_var
                     x_values = []
                     y_values = []
 
@@ -274,43 +300,39 @@ class ScatterVarSelectionDialog(QDialog):
                         if run_name != run:
                             continue
 
-                        # Extract X and Y values for the selected variables
                         for variable in entry.get('values', []):
                             cde = variable.get('cde', 'Unknown')
-                            if cde == x_var:
+                            if cde == x_cde:
                                 values = variable.get('values', [])
                                 if values:
                                     try:
                                         x_values = list(map(float, values))
                                     except ValueError as e:
-                                        print(f"ValueError for {cde}: {e}")
+                                        print(f"ValueError for {cde} in run {run}: {e}")
                                         x_values = []
-                            elif cde == y_var:
+                            elif cde == y_cde:
                                 values = variable.get('values', [])
                                 if values:
                                     try:
                                         y_values = list(map(float, values))
                                     except ValueError as e:
-                                        print(f"ValueError for {cde}: {e}")
+                                        print(f"ValueError for {cde} in run {run}: {e}")
                                         y_values = []
 
-                    # Ensure X and Y have the same length
                     if not x_values or not y_values:
-                        print(f"No valid data for {x_var} vs {y_var} in run {run}")
+                        print(f"No valid data for {x_cde} vs {y_cde} in run {run}")
                         continue
 
                     min_length = min(len(x_values), len(y_values))
                     x_values = x_values[:min_length]
                     y_values = y_values[:min_length]
 
-                    # Add scatter plot data for this X/Y pair and run
-                    self.plot_data.append((x_values, y_values, f"{x_var} vs {y_var} ({run})"))
+                    self.plot_data.append((x_values, y_values, f"{x_cde} vs {y_cde} ({run})"))
 
         if not self.plot_data:
             QMessageBox.warning(self, "Warning!", "No valid data to plot for the selected runs and variables.")
             return
 
-        # Create or update GraphWindow in the graph tab
         filename = self.selected_files[0] if self.selected_files else None
         if filename is None:
             QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
@@ -324,13 +346,13 @@ class ScatterVarSelectionDialog(QDialog):
                 self.plot_data,
                 "Scatter Plot",
                 self.data,
-                selected_x_vars + selected_y_vars,
+                [x.split('(')[0].strip() for x in selected_x_vars] + [y.split('(')[0].strip() for y in selected_y_vars],
                 selected_runs,
                 filename,
                 self
             )
             self.graph_layout.addWidget(self.graph_window)
-        self.tab_widget.setCurrentIndex(1)  # Switch to Graph tab
+        self.tab_widget.setCurrentIndex(1)
 
     def show_selection_tab(self):
         """Switch back to the selection tab."""
@@ -345,9 +367,22 @@ class ScatterVarSelectionDialog(QDialog):
 
 def open_scatter_var_selection(selected_files, parent=None):
     dialog = ScatterVarSelectionDialog(selected_files, parent)
+    center_window_on_parent(dialog, parent)
     if dialog.exec_():
         return dialog.get_selections()
     return None, (None, None), None
+
+def center_window_on_parent(window, parent):
+    if parent is None:
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        center = screen_geometry.center()
+    else:
+        center = parent.frameGeometry().center()
+
+    geo = window.frameGeometry()
+    geo.moveCenter(center)
+    window.move(geo.topLeft())
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

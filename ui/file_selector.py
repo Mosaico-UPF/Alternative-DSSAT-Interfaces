@@ -4,7 +4,7 @@ import sys
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, 
     QListWidget, QListWidgetItem, QComboBox, QPushButton, QApplication, 
-    QStyle, QMessageBox
+    QStyle, QMessageBox, QTextEdit
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -83,16 +83,22 @@ class FileSelectorDialog(QDialog):
         self.filter_combo.currentIndexChanged.connect(self.apply_filter)
         self.layout.addWidget(self.filter_combo)
 
-        # OK and Cancel buttons
+        # OK, cancel and preview buttons
         self.button_layout = QHBoxLayout()
+        self.preview_button = QPushButton("Preview")
+        self.preview_button.clicked.connect(self.preview_file)
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.on_ok_clicked)
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.reject)
+
         self.button_layout.addStretch()
+        self.button_layout.addWidget(self.preview_button)
         self.button_layout.addWidget(self.ok_button)
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
+
+
 
         self.setLayout(self.layout)
 
@@ -180,14 +186,59 @@ class FileSelectorDialog(QDialog):
 
     def get_selected_files(self):
         return self.selected_files
+    
+    def preview_file(self):
+        """Preview the content of the first selected file or prompt if none selected."""
+        if not self.selected_files:
+            QMessageBox.warning(self, "Warning!", "No files selected to preview.")
+            return
+
+        file_path = self.selected_files[0]
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                file_content = file.read()
+
+            preview_dialog = QDialog(self)
+            preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
+            preview_dialog.resize(600, 400)
+
+            text_edit = QTextEdit(preview_dialog)
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(file_content)
+
+            layout = QVBoxLayout()
+            layout.addWidget(text_edit)
+            preview_dialog.setLayout(layout)
+
+            # Centralizar o preview
+            center_window_on_parent(preview_dialog, self)
+            preview_dialog.exec_()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not preview the file:\n{str(e)}")
+
+
 
 def open_file_selector(parent=None):
     """Open the file selector dialog and return the selected files."""
     dialog = FileSelectorDialog(parent)
+    center_window_on_parent(dialog, parent)
     if dialog.exec_():
         return dialog.get_selected_files()
     return []
 
+def center_window_on_parent(window, parent):
+    if parent is None:
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        center = screen_geometry.center()
+    else:
+        center = parent.frameGeometry().center()
+
+    geo = window.frameGeometry()
+    geo.moveCenter(center)
+    window.move(geo.topLeft())
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     files = open_file_selector()
