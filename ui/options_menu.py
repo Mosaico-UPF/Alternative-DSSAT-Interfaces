@@ -2,8 +2,15 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTreeWidget, QTreeWidgetItem, 
 from PyQt5.QtCore import Qt
 
 class OptionsDialog(QDialog):
+    """Dialog for selecting the plot type the DSSAT Output Viewer."""
     def __init__(self, parent=None):
+        """Initialize the options dialog with a tree widget for plot type selection.
+        
+        Args:
+            parent: Parent widget for the dialog (tipically MainWindow).
+        """
         super().__init__(parent)
+        # Set dialog properties
         self.setWindowTitle("Options")
         self.setGeometry(200, 200, 300, 200)
         self.parent_window = parent  # Reference to MainWindow
@@ -36,7 +43,7 @@ class OptionsDialog(QDialog):
         self.scatter_plot_item = QTreeWidgetItem(self.tree_widget, ["Scatter Plot"])
         self.evaluate_item = QTreeWidgetItem(self.tree_widget, ["Evaluate"])
 
-        # Set initial selection
+        # Set initial selection to Time Series
         self.tree_widget.setCurrentItem(self.time_series_item)
         self.time_series_item.setSelected(True)
 
@@ -61,24 +68,32 @@ class OptionsDialog(QDialog):
         layout.addWidget(self.apply_button)
 
     def apply(self):
+        """Apply the selected plot type and close the dialog if valid."""
+        # Get selected item from tree widget
         selected_item = self.tree_widget.currentItem()
         if not selected_item:
             QMessageBox.warning(self, "Warning", "Please select a plot type.")
             return
-
+        # Convert selected plot type to lowercase with underscores
         new_plot_type = selected_item.text(0).lower().replace(" ", "_")
         if new_plot_type == self.plot_type:
-            self.accept()
+            self.accept() # No change, close dialog
             return
 
         self.plot_type = new_plot_type
-        self.accept()
+        self.accept() # Update plot type and close dialog
 
     def get_plot_type(self):
+        """Return the currently selected plot type.
+        
+        Returns: 
+            str: Selected plot type (lowercase with underscores, e.g., "time_series").
+        """
         selected_item = self.tree_widget.currentItem()
         return selected_item.text(0).lower().replace(" ", "_") if selected_item else self.plot_type
 
 if __name__ == "__main__":
+    """Run the dialog as a standalone application for testing."""
     from PyQt5.QtWidgets import QApplication
     import sys
     app = QApplication(sys.argv)

@@ -10,31 +10,37 @@ from PyQt5.QtCore import Qt
 
 # Adjust imports to handle both package and script execution
 try:
-    from ..utils.cde_data_parser import parse_data_cde
-    from ..data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
-    from ..plots.plotting import plot_time_series
-    from ..ui.graph_window import GraphWindow
-except ImportError:
-    # Add project root to sys.path
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    sys.path.insert(0, project_root)
-    from data.data_processor import load_all_file_data, extract_runs_and_variables, get_file_type
     from utils.cde_data_parser import parse_data_cde
     from plots.plotting import plot_time_series
     from ui.graph_window import GraphWindow
-    
-class TimeSeriesVarSelectionDialog(QDialog):
-    def __init__(self, selected_files, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Time Series Variable and Run Selection")
-        self.setGeometry(200, 200, 1000, 700)  # Adjusted size to accommodate tabs
+except ImportError:
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.insert(0, project_root)
+    from utils.cde_data_parser import parse_data_cde
+    from plots.plotting import plot_time_series
+    from ui.graph_window import GraphWindow
 
-        # Store the selected files
+class TimeSeriesVarSelectionDialog(QDialog):
+    """Dialog for selecting variables and runs for time series visualization."""
+    def __init__(self, selected_files, parent=None):
+        """Initialize the dialog with file selection and UI setup.
+        
+        Args:
+            selected_files (list): List of file paths to process.
+            parent: Parent widget for the dialog.
+        """
+        super().__init__(parent)
+        # Set dialog properties
+        self.setWindowTitle("Time Series Variable and Run Selection")
+        self.setGeometry(200, 200, 1000, 700)
+
+        # Store selected files and initialize data containers
         self.selected_files = selected_files
         self.data = []
         self.plot_data = []
 
-        # Validate file selection: max one .t file
+        # Validate file selection
+        from data.data_processor import get_file_type
         t_file_count = sum(1 for f in selected_files if get_file_type(os.path.basename(f)) == "t")
         if t_file_count > 1:
             QMessageBox.warning(self, "Warning!", "Only one .t file is allowed to be selected.")
@@ -46,20 +52,17 @@ class TimeSeriesVarSelectionDialog(QDialog):
             self.reject()
             return
 
-        # Main layout with tab widget
+        # Set up main layout with tab widget
         self.main_layout = QVBoxLayout()
         self.tab_widget = QTabWidget()
         self.main_layout.addWidget(self.tab_widget)
 
-        # Selection Tab
+        # Create selection tab
         self.selection_tab = QWidget()
         self.selection_layout = QVBoxLayout(self.selection_tab)
 
-        # Horizontal layout for variables and runs
+        # Create top layout for file display and preview
         self.content_layout = QHBoxLayout()
-
-
-        # Horizontal layout for selected files display and preview button
         self.top_layout = QHBoxLayout()
         self.files_display = QListWidget()
         self.files_display.setMaximumWidth(200)
@@ -77,7 +80,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
         self.top_layout.addStretch()
         self.selection_layout.addLayout(self.top_layout)
 
-        # Horizontal layout for variables and runs
+        # Create content layout for variable and run selection
         self.content_layout = QHBoxLayout()
         self.variables_group = QGroupBox("Select Variables")
         self.variables_layout = QVBoxLayout()
@@ -91,7 +94,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
         self.content_layout.addWidget(self.variables_group)
         self.selection_layout.addLayout(self.content_layout)
 
-        #Runs
+        # Set up runs selection group
         self.runs_layout = QVBoxLayout()
         self.runs_layout.setAlignment(Qt.AlignTop)
 
@@ -113,8 +116,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
 
         self.runs_group.setLayout(group_layout)
 
-
-        # Buttons for selection tab
+        # Create buttons for selection tab
         self.button_layout = QHBoxLayout()
         self.clear_button = QPushButton("Clear All")
         self.clear_button.clicked.connect(self.clear_all)
@@ -132,7 +134,7 @@ class TimeSeriesVarSelectionDialog(QDialog):
         self.selection_layout.addLayout(self.button_layout)
         self.selection_tab.setLayout(self.selection_layout)
 
-        # Graph Tab
+        # Create graph tab
         self.graph_tab = QWidget()
         self.graph_layout = QVBoxLayout(self.graph_tab)
         self.graph_window = None
@@ -156,11 +158,13 @@ class TimeSeriesVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning!", "No files selected to preview.")
             return
 
+        # Read and display the content of the first file
         file_path = self.selected_files[0]
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_content = file.read()
 
+            # Create preview dialog
             preview_dialog = QDialog(self)
             preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
             preview_dialog.setGeometry(250, 250, 600, 400)
@@ -179,18 +183,22 @@ class TimeSeriesVarSelectionDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Could not preview the file:\n{str(e)}")
 
     def display_data(self):
-        """Display variables and runs in their respective scroll areas."""
+        """Diplay runs and variables in their respective scroll areas."""
+        from data.data_processor import extract_runs_and_variables
         self.clear_layout(self.variables_layout)
         self.clear_layout(self.runs_layout)
 
         if not self.data:
+            # Display placeholder labels if no data is available
             self.variables_layout.addWidget(QLabel("No data available (using mock data or API down)."))
             self.runs_layout.addWidget(QLabel("No data available (using mock data or API down)."))
             return
 
+        # Extract runs and variables from data
         runs, variables = extract_runs_and_variables(self.data)
-
-        print(f"Runs: {runs}, Variables: {variables}")
+        print(f"Runs: {runs}")
+        print(f"Variables: {variables}")
+        print(f"Sample data entry: {self.data[0] if self.data else 'No data'}")
 
         # Load variable mappings from DATA.CDE
         try:
@@ -200,31 +208,53 @@ class TimeSeriesVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variable names will be displayed as acronyms.")
             variable_map = {}
 
-        # Define headers to ignore (include DAS and its forms)
-        headers_to_ignore = {'@YEAR', 'DOY', 'DAP', 'Days after start of simulation', 'Day of Year', 'TRNO', 'DATE', 'DAS'}
+        # Define headers to ignore for variable selection
+        headers_to_ignore = {'@YEAR', 'DOY', 'DAP', 'DAYS AFTER START OF SIMULATION', 'DAY OF YEAR', 'TRNO', 'DATE', 'DAS'}
 
-        # Populate runs
+        # Identify measured variables for bolding
+        observed_vars = set()
+        for entry in self.data:
+            if not isinstance(entry, dict):
+                #print(f"Skipping invalid entry: {entry}")
+                continue
+            for value in entry.get('values', []):
+                if value.get('type') == 'measured':
+                    cde = value.get('cde')
+                    if cde:
+                        observed_vars.add(cde.upper())
+                        #print(f"Found measured variable: {cde}")
+
+        #print(f"Observed variables: {observed_vars}")
+
+        # Populate runs checkboxes
         for run in runs:
             checkbox = QCheckBox(str(run))
             checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             checkbox.setStyleSheet("QCheckBox { padding: 1px; margin: 0px; }")
             self.runs_layout.addWidget(checkbox)
 
-        # Populate variables with full name (including units) and acronym, excluding headers
+        # Populate variable checkboxes with full names an bold measured variables
         for var in variables:
-            # Check if var is an acronym or full text contains a header
-            if var in headers_to_ignore or any(header in var for header in headers_to_ignore):
+            if var.upper() in headers_to_ignore or any(header in var.upper() for header in headers_to_ignore):
                 print(f"Skipping header variable: {var}")
                 continue
             full_name = variable_map.get(var, var)
-            if full_name == var:
-                print(f"Variable {var} not found in DATA.CDE, using acronym only.")
             display_text = f"{full_name} ({var})" if full_name != var else var
+
             checkbox = QCheckBox(display_text)
+            if var.upper() in observed_vars:
+                font = checkbox.font()
+                font.setBold(True)
+                checkbox.setFont(font)
+                #print(f"Bolding variable: {var}")
             self.variables_layout.addWidget(checkbox)
-                
+            
     def clear_layout(self, layout):
-        """Clear all widgets from a layout."""
+        """Clear all widgets from a layout.
+        
+        Args:
+            layout: PyQt5 layout to clear.
+        """
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
@@ -232,12 +262,16 @@ class TimeSeriesVarSelectionDialog(QDialog):
                 widget.deleteLater()
 
     def toggle_all_runs(self, state):
-        """Toggle all run checkboxes based on the Select All Runs checkbox."""
+        """Toggle all run checkboxes based on the Select All Runs checkbox.
+        
+        Args:
+            state: Qt.CheckState of the Select All Runs checkbox.
+        """
         for checkbox in self.runs_widget.findChildren(QCheckBox):
             checkbox.setChecked(state == Qt.Checked)
 
     def clear_all(self):
-        """Clear all selections for variables and runs."""
+        """Uncheck all variable and run checkboxes."""
         for checkbox in self.variables_widget.findChildren(QCheckBox):
             checkbox.setChecked(False)
         for checkbox in self.runs_widget.findChildren(QCheckBox):
@@ -246,103 +280,140 @@ class TimeSeriesVarSelectionDialog(QDialog):
 
     def reload_data(self):
         """Reload data from the files and refresh the UI."""
+        from data.data_processor import load_all_file_data
         self.data, error = load_all_file_data(self.selected_files)
         if error:
             QMessageBox.warning(self, "Warning!", error)
         print(f"Loaded data: {self.data}")
 
     def show_graph_tab(self):
-        """Prepare plot data and switch to the graph tab."""
+        """Prepare time series plot data and switch to the graph tab."""
+        # Get selected runs and variables
         selected_runs = [checkbox.text() for checkbox in self.runs_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         selected_vars = [checkbox.text() for checkbox in self.variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
-
         if not self.data:
-            QMessageBox.warning(self, "Warning!", "No data available to create a graph (using mock data or API down).")
+            QMessageBox.warning(self, "Warning!", "No data available to create a graph.")
             return
         if not selected_runs or not selected_vars:
             QMessageBox.warning(self, "Warning!", "Select at least one run and one variable")
             return
 
-        # Prepare plot data
+        # Prepare plot data for time series
         self.plot_data = []
         is_tfile = any(entry.get("file_type") == "t" for entry in self.data)
 
+        # Determine planting data for DAP calculations
+        planting_date = None
+        for entry in self.data:
+            if entry.get("file_type") == "t" and entry.get("day"):
+                try:
+                    planting_date = datetime.strptime(entry.get("day"), '%Y-%m-%d')
+                    break
+                except ValueError:
+                    continue
+            elif entry.get("file_type") == "out":
+                year_var = next((v for v in entry['values'] if v['cde'].upper() == '@YEAR'), None)
+                doy_var = next((v for v in entry['values'] if v['cde'].upper() == 'DOY'), None)
+                if year_var and doy_var and year_var['values'] and doy_var['values']:
+                    try:
+                        planting_date = datetime.strptime(f"{year_var['values'][0]}-{int(doy_var['values'][0]):03}", "%Y-%j")
+                        break
+                    except (ValueError, TypeError):
+                        continue
+
+        # Process data for each run and variable
         for entry in self.data:
             run_name = entry.get('run', 'Unknown')
             if run_name not in selected_runs:
                 continue
+            
+            # Extract x-axis data (calendar and DAP)
+            year_var = next((v for v in entry['values'] if v['cde'].upper() == '@YEAR'), None)
+            doy_var = next((v for v in entry['values'] if v['cde'].upper() == 'DOY'), None)
+            dap_var = next((v for v in entry['values'] if v['cde'].upper() == 'DAP'), None)
 
+            calendar_x = []
+            dap_x = []
+
+            if is_tfile:
+                day_str = entry.get('day', '')
+                try:
+                    start_date = datetime.strptime(day_str, '%Y-%m-%d')
+                    max_len = max(len(v.get('values', [])) for v in entry.get('values', []))
+                    calendar_x = [start_date + timedelta(days=i) for i in range(max_len)]
+                    dap_x = list(range(max_len))
+                except (ValueError, TypeError) as e:
+                    print(f"Invalid or missing 'day' in .t file for {run_name}: {day_str}. Error: {e}")
+                    calendar_x = list(range(max_len))
+                    dap_x = list(range(max_len))
+            else:
+                if year_var and doy_var:
+                    try:
+                        calendar_x = [
+                            datetime.strptime(f"{y}-{int(d):03}", "%Y-%j")
+                            for y, d in zip(year_var['values'], doy_var['values'])
+                        ]
+                    except Exception as e:
+                        print(f"Error converting YEAR+DOY to dates for {run_name}: {e}")
+                if dap_var:
+                    try:
+                        dap_x = list(map(int, dap_var['values']))
+                    except Exception as e:
+                        print(f"Error parsing DAP values for {run_name}: {e}")
+                max_len = max(len(v.get('values', [])) for v in entry.get('values', []))
+                if not calendar_x:
+                    calendar_x = list(range(max_len))
+                if not dap_x:
+                    dap_x = list(range(max_len))
+
+            # Process selected variables
             for variable in entry.get('values', []):
                 cde = variable.get('cde', 'Unknown')
-                # Match cde with selected_vars (handle both "DESCRIPTION (CDE)" and "CDE" formats)
                 if any(cde in var or f"({cde})" in var for var in selected_vars):
                     values = variable.get('values', [])
+                    data_type = variable.get('type', 'simulated')
                     if not values:
                         print(f"Warning: No values for {cde} in run {run_name}")
                         continue
-
                     try:
-                        y_values = list(map(float, values))
-
-                        if is_tfile:
-                            day_str = entry.get('day', '')
+                        y_values = [float(v) for v in values]
+                        x_calendar = variable.get('x_calendar', calendar_x[:len(y_values)])
+                        if data_type == 'measured' and x_calendar and planting_date:
                             try:
-                                start_date = datetime.strptime(day_str, '%Y-%m-%d')
-                                x_values = [start_date + timedelta(days=i) for i in range(len(y_values))]
+                                x_dap = [
+                                    (datetime.strptime(date, '%Y-%m-%d') - planting_date).days
+                                    if isinstance(date, str)
+                                    else (date - planting_date).days
+                                    for date in x_calendar
+                                ]
                             except (ValueError, TypeError) as e:
-                                print(f"Invalid or missing 'day' in .t file for {run_name}: {day_str}. Error: {e}")
-                                x_values = list(range(len(y_values)))
-
-                            self.plot_data.append({
-                                'x_calendar': x_values,
-                                'x_dap': list(range(len(y_values))),
-                                'y': y_values,
-                                'label': f'{cde} ({run_name})'
-                            })
+                                print(f"Error calculating DAP for measured data {cde} in run {run_name}: {e}")
+                                x_dap = [0] * len(y_values)
                         else:
-                            year_var = next((v for v in entry['values'] if v['cde'].upper() == '@YEAR'), None)
-                            doy_var = next((v for v in entry['values'] if v['cde'].upper() == 'DOY'), None)
-                            dap_var = next((v for v in entry['values'] if v['cde'].upper() == 'DAP'), None)
+                            x_dap = dap_x[:len(y_values)] if not variable.get('x_calendar') else dap_x[:len(y_values)]
 
-                            calendar_x = []
-                            dap_x = []
+                        if not x_calendar or not x_dap or len(x_calendar) != len(y_values):
+                            print(f"Warning: Mismatched data lengths for {cde} in run {run_name}: x={len(x_calendar)}, y={len(y_values)}")
+                            continue
 
-                            if year_var and doy_var:
-                                try:
-                                    calendar_x = [
-                                        datetime.strptime(f"{y}-{int(d):03}", "%Y-%j")
-                                        for y, d in zip(year_var['values'], doy_var['values'])
-                                    ]
-                                except Exception as e:
-                                    print(f"Error converting YEAR+DOY to dates for {run_name}: {e}")
-                                    calendar_x = list(range(len(y_values)))
-
-                            if dap_var:
-                                try:
-                                    dap_x = list(map(int, dap_var['values']))
-                                except Exception as e:
-                                    print(f"Error parsing DAP values for {run_name}: {e}")
-                                    dap_x = list(range(len(y_values)))
-                            else:
-                                dap_x = list(range(len(y_values)))
-
-                            self.plot_data.append({
-                                'x_calendar': calendar_x,
-                                'x_dap': dap_x,
-                                'y': y_values,
-                                'label': f'{cde} ({run_name})'
-                            })
+                        self.plot_data.append({
+                            'x_calendar': x_calendar,
+                            'x_dap': x_dap,
+                            'y': y_values,
+                            'label': f'{cde} ({run_name})',
+                            'type': data_type
+                        })
                     except ValueError as e:
                         print(f"ValueError for {cde} in run {run_name}: {e}")
                         continue
 
-        print(f"Generated plot_data: {self.plot_data}")  # Debug print
+        # Validate file selection
         filename = self.selected_files[0] if self.selected_files else None
         if filename is None:
             QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
             return
 
-        # Create or update the Graph Window
+        # Create or update graph window
         if self.graph_window:
             self.graph_window.plot_data = self.plot_data
             self.graph_window.refresh_plot()
@@ -358,19 +429,31 @@ class TimeSeriesVarSelectionDialog(QDialog):
             )
             self.graph_layout.addWidget(self.graph_window)
         self.tab_widget.setCurrentIndex(1)
-
+        
     def show_selection_tab(self):
         """Switch back to the selection tab."""
         self.tab_widget.setCurrentIndex(0)
 
     def get_selections(self):
-        """Return the selected runs and variables."""
+        """Return the selected runs and variables.
+        
+        Returns:
+            tuple: (selected runs, selected variables, data).
+        """
         selected_runs = [checkbox.text() for checkbox in self.runs_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         selected_vars = [checkbox.text() for checkbox in self.variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         return selected_runs, selected_vars, self.data
 
 def open_time_series_var_selection(selected_files, parent=None):
-    """Open the time series variable selection dialog and return the selections."""
+    """Open the time series variable selection dialog and return the selections.
+    
+    Args:
+        selected_files (list): List of file paths to process.
+        parent: Parent widget for the dialog.
+    
+    Returns: 
+        tuple: (selected runs, selected variables, data) or (None, None, None) if rejected.
+    """
     dialog = TimeSeriesVarSelectionDialog(selected_files, parent)
     center_window_on_parent(dialog, parent)
     if dialog.exec_():
@@ -378,6 +461,12 @@ def open_time_series_var_selection(selected_files, parent=None):
     return None, None, None
 
 def center_window_on_parent(window, parent):
+    """Center the window relative to its parent or screen.
+
+    Args:
+        window: PyQt5 window to center.
+        parent: Parent widget or None to use screen center.
+    """
     if parent is None:
         screen = QApplication.primaryScreen()
         screen_geometry = screen.availableGeometry()
@@ -389,8 +478,8 @@ def center_window_on_parent(window, parent):
     geo.moveCenter(center)
     window.move(geo.topLeft())
 
-
 if __name__ == "__main__":
+    """Run the dialog as a standalone application for testing."""
     app = QApplication(sys.argv)
     selected_files = [r"C:\DSSAT48\somefile.out", r"C:\DSSAT48\anothertfile.t"]
     runs, vars, data = open_time_series_var_selection(selected_files)

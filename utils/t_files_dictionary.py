@@ -1,5 +1,5 @@
 CROP_T_FILE_EXTENSIONS = {
-    '.alt': 'Alfalfa/Lucerna',
+    '.alt': 'Alfalfa',
     '.art': 'Aroid',
     '.bat': 'Barley',
     '.bnt': 'Dry bean',
@@ -8,14 +8,14 @@ CROP_T_FILE_EXTENSIONS = {
     '.cst': 'Cassava',
     '.fat': 'Fallow',
     '.gwt': 'Grass-weeds',
-    '.mlt': 'Pearl millet',
-    '.mzt': 'Maize/Corn',
+    '.mlt': 'Millet',
+    '.mzt': 'Maize',
     '.pnt': 'Peanut',
     '.ptt': 'Potato',
     '.rit': 'Rice',
     '.sbt': 'Soybean',
     '.sct': 'Sugar cane',
     '.sgt': 'Sorghum',
-    '.stt': 'Shrubs/Trees',
+    '.stt': 'Shrubs',
     '.wht': 'Wheat'
 }

@@ -20,11 +20,20 @@ except ImportError:
     from ui.graph_window import GraphWindow
 
 class ScatterVarSelectionDialog(QDialog):
+    """Dialog for selecting variables and runs for scatter plot visualization"""
     def __init__(self, selected_files, parent=None):
+        """Initialize the dialog with file selection and UI setup.
+        
+        Args:
+            selected_files (list): List of file paths to process.
+            parent: Parent widget for the dialog.
+        """
         super().__init__(parent)
+        # Set dialog properties
         self.setWindowTitle("Scatter Plot Variable Selection Menu")
         self.setGeometry(200, 200, 1000, 700)
 
+        # Store selected files and initialize data containers
         self.selected_files = selected_files
         self.data = []
         self.plot_data = []
@@ -156,11 +165,13 @@ class ScatterVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning!", "No files selected to preview.")
             return
 
+        # Read and display content of the first file
         file_path = self.selected_files[0]
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_content = file.read()
 
+            # Create preview dialog
             preview_dialog = QDialog(self)
             preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
             preview_dialog.setGeometry(250, 250, 600, 400)
@@ -180,16 +191,19 @@ class ScatterVarSelectionDialog(QDialog):
 
     def display_data(self):
         """Display variables and runs in their respective scroll areas."""
+        # Clear existing layouts
         self.clear_layout(self.x_variables_layout)
         self.clear_layout(self.y_variables_layout)
         self.clear_layout(self.runs_layout)
 
         if not self.data:
+            # Display placeholder labels if no  data is available
             self.x_variables_layout.addWidget(QLabel("No data available (using mock data or API down)."))
             self.y_variables_layout.addWidget(QLabel("No data available (using mock data or API down)."))
             self.runs_layout.addWidget(QLabel("No data available (using mock data or API down)."))
             return
 
+        # Extract runs and variables from data
         runs, variables = extract_runs_and_variables(self.data)
 
         print(f"Runs: {runs}, Variables: {variables}")
@@ -202,7 +216,7 @@ class ScatterVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variable names will be displayed as acronyms.")
             variable_map = {}
 
-        # Define headers to ignore
+        # Define headers to ignore variable selection
         headers_to_ignore = {'@YEAR', 'DOY', 'DAP', 'Days after start of simulation', 'Day of Year', 'TRNO', 'DATE', 'DAS'}
 
         # Populate runs
@@ -227,7 +241,11 @@ class ScatterVarSelectionDialog(QDialog):
             self.y_variables_layout.addWidget(y_checkbox)
 
     def clear_layout(self, layout):
-        """Clear all widgets from a layout."""
+        """Clear all widgets from a layout.
+        
+        Args:
+            layout: PyQt5 layout to clear.
+        """
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
@@ -236,12 +254,15 @@ class ScatterVarSelectionDialog(QDialog):
                 widget.deleteLater()
 
     def toggle_all_runs(self, state):
-        """Toggle all run checkboxes based on the Select All Runs checkbox."""
+        """Toggle all run checkboxes based on the Select All Runs checkbox state.
+        
+        Args:
+            state: Qt.CheckState of the Select All Runs checkbox."""
         for checkbox in self.runs_widget.findChildren(QCheckBox):
             checkbox.setChecked(state == Qt.Checked)
 
     def clear_all(self):
-        """Clear all selections for variables and runs."""
+        """Uncheck all variable and run checkboxes."""
         for checkbox in self.x_variables_widget.findChildren(QCheckBox):
             checkbox.setChecked(False)
         for checkbox in self.y_variables_widget.findChildren(QCheckBox):
@@ -252,6 +273,7 @@ class ScatterVarSelectionDialog(QDialog):
 
     def reload_data(self):
         """Reload data from the files and refresh the UI."""
+        # Load data from files
         self.data, error = load_all_file_data(self.selected_files)
         if error:
             QMessageBox.warning(self, "Error", error)
@@ -260,17 +282,20 @@ class ScatterVarSelectionDialog(QDialog):
 
     def show_graph_tab(self):
         """Prepare plot data and switch to the graph tab."""
+        # Get selected runs
         selected_runs = [checkbox.text() for checkbox in self.runs_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         if not selected_runs:
             QMessageBox.warning(self, "Warning!", "Please select at least one run.")
             return
-
+        
+        # Get selected X-axis variables
         x_checkboxes = self.x_variables_widget.findChildren(QCheckBox)
         selected_x_vars = [checkbox.text() for checkbox in x_checkboxes if checkbox.isChecked()]
         if not selected_x_vars:
             QMessageBox.warning(self, "Warning!", "Please select at least one X-axis variable.")
             return
 
+        # Get Y-axis variables
         y_checkboxes = self.y_variables_widget.findChildren(QCheckBox)
         selected_y_vars = [checkbox.text() for checkbox in y_checkboxes if checkbox.isChecked()]
         if not selected_y_vars:
@@ -281,6 +306,7 @@ class ScatterVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning!", "No data available to create a graph (using mock data or API down).")
             return
 
+        # Prepare plot data for scatter plot
         self.plot_data = []
         is_tfile = any(entry.get("file_type") == "t" for entry in self.data)
 
@@ -288,13 +314,15 @@ class ScatterVarSelectionDialog(QDialog):
             for x_var in selected_x_vars:
                 for y_var in selected_y_vars:
                     if x_var == y_var:
-                        continue
+                        continue # Skip same variable for X and Y
+
                     # Extract cde from display text (e.g., "Full Name (CDE)" -> CDE)
                     x_cde = x_var.split('(')[-1].strip(')') if '(' in x_var else x_var
                     y_cde = y_var.split('(')[-1].strip(')') if '(' in y_var else y_var
                     x_values = []
                     y_values = []
 
+                    # Extract values for selected variables and run
                     for entry in self.data:
                         run_name = entry.get('run', 'Unknown')
                         if run_name != run:
@@ -322,7 +350,8 @@ class ScatterVarSelectionDialog(QDialog):
                     if not x_values or not y_values:
                         print(f"No valid data for {x_cde} vs {y_cde} in run {run}")
                         continue
-
+                    
+                    # Truncate to shortest lenght to ensure matching pairs
                     min_length = min(len(x_values), len(y_values))
                     x_values = x_values[:min_length]
                     y_values = y_values[:min_length]
@@ -333,11 +362,13 @@ class ScatterVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning!", "No valid data to plot for the selected runs and variables.")
             return
 
+        # Validate file selection
         filename = self.selected_files[0] if self.selected_files else None
         if filename is None:
             QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
             return
 
+        # Create or update graph window
         if self.graph_window:
             self.graph_window.plot_data = self.plot_data
             self.graph_window.refresh_plot()
@@ -359,13 +390,26 @@ class ScatterVarSelectionDialog(QDialog):
         self.tab_widget.setCurrentIndex(0)
 
     def get_selections(self):
-        """Return the selected run and variables."""
+        """Return the selected run and variables.
+        
+        Returns: 
+            tuple: (selected runs, (selected x variables, selected y variables), data).
+        """
         selected_runs = [checkbox.text() for checkbox in self.runs_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         selected_x_vars = [checkbox.text() for checkbox in self.x_variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         selected_y_vars = [checkbox.text() for checkbox in self.y_variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         return selected_runs, (selected_x_vars, selected_y_vars), self.data
 
 def open_scatter_var_selection(selected_files, parent=None):
+    """Open the scatter variable selection dialog and return selections.
+    
+    Args:
+        selected_files (list): List of file oaths to process.
+        parent: Parent widget for the dialog.
+        
+    Returns: 
+        tuple: (selected runs, (selected x variables, selected y variables), data) or (None(None, None), None) if rejected.
+    """
     dialog = ScatterVarSelectionDialog(selected_files, parent)
     center_window_on_parent(dialog, parent)
     if dialog.exec_():
@@ -373,6 +417,12 @@ def open_scatter_var_selection(selected_files, parent=None):
     return None, (None, None), None
 
 def center_window_on_parent(window, parent):
+    """Center the window relative to its parent or screen.
+    
+    Args:
+        window: PyQt5 window to center.
+        parent: Parent widget or None to use screen center.
+    """
     if parent is None:
         screen = QApplication.primaryScreen()
         screen_geometry = screen.availableGeometry()
@@ -385,6 +435,7 @@ def center_window_on_parent(window, parent):
     window.move(geo.topLeft())
 
 if __name__ == "__main__":
+    """Run the dialog as a standalone application for testing."""
     app = QApplication(sys.argv)
     selected_files = [r"C:\DSSAT48\somefile.out", r"C:\DSSAT48\anothertfile.t"]
     run, (x_var, y_var), data = open_scatter_var_selection(selected_files)

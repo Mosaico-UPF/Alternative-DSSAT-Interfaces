@@ -29,14 +29,34 @@ except ImportError:
 
     
 def print_graph(canvas, parent):
+    """Print the graph canvas using a print dialog.
+    
+    Args:
+        canvas: Matplotlib FigureCanvas to print.
+        parent: Parent widget for the print dialog.
+    """
+    # Create printer and dialog
     printer = QPrinter(QPrinter.HighResolution)
     dialog = QPrintDialog(printer, parent)
     if dialog.exec_() == QDialog.Accepted:
         canvas.print_(printer)
 
 class GraphWindow(QWidget):
+    """Window for displaying graphs with control options for legend, date mode, and exports."""
     def __init__(self, plot_data, plot_type, data, variables_group, runs_group, filename, parent=None):
-        super().__init__(parent) 
+        """Initialize the graph window with plot data and control panel.
+        
+        Args:
+            plot_data (list): Data for plotting (format depends on plot_type).
+            plot_type (str): Type of plot ("time series", "scatter plot", or "evaluate data").
+            data (list): Raw data for statistics and processing.
+            variables_group (list): Selected variables for display.
+            runs_group (list): Selected runs for display..
+            filename (str): Path to the data file.
+            parent: Parent widget for the dialog.
+        """
+        super().__init__(parent)
+        # Store initialization data 
         self.filename = filename
         self.current_filename = filename
         self.file_type = get_file_type(self.filename)
@@ -46,24 +66,30 @@ class GraphWindow(QWidget):
         self.runs_group = runs_group
         self.plot_type = plot_type.lower()
 
+        # Enable date mode for time series with .out files.
         self.enable_date_mode = (self.plot_type == "time series" and any(
             entry.get("file_type") == "out" for entry in data if isinstance(entry, dict)
         ))
 
+        # Set window properties
         self.setWindowTitle(f"{plot_type.title()} Graph Window")
         self.setGeometry(100, 100, 1000, 700)
 
+        # Create matplotlib figure and canvas
         self.figure = plt.Figure(figsize=(9, 6), tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # Create control panel
         control_panel = QWidget()
         control_layout = QVBoxLayout()
 
+        # Legend toggle button 
         self.toggle_legend_btn = QPushButton("Hide Legend")
         self.toggle_legend_btn.setCheckable(True)
         self.toggle_legend_btn.clicked.connect(self.toggle_legend)
 
+        # Date mode controls
         self.date_mode_label = QLabel("Date Mode:")
         self.date_mode_calendar = QRadioButton("Calendar Days")
         self.date_mode_dap = QRadioButton("Days After Planting")
@@ -76,20 +102,25 @@ class GraphWindow(QWidget):
         self.date_mode_calendar.toggled.connect(self.refresh_plot)
         self.date_mode_dap.toggled.connect(self.refresh_plot)
 
+        # Disable date mode controls if no applicable
         if not self.enable_date_mode:
             self.date_mode_calendar.setEnabled(False)
             self.date_mode_calendar.setStyleSheet("color: gray;")
             self.date_mode_dap.setEnabled(False)
             self.date_mode_dap.setStyleSheet("color: gray;")
 
+        # Create action buttons
         self.print_btn = QPushButton("Print")
         self.export_txt_btn = QPushButton("Export data to text file")
         self.export_excel_btn = QPushButton("Export to Excel")
         self.statistic_btn = QPushButton("Statistic")
         self.statistic_btn.clicked.connect(self.show_statistics)
-        # Enable statistic button only for evaluate files
-        self.statistic_btn.setEnabled(self.file_type == "evaluate")
+        # Enable statistic button for evaluate files and sim-vs-obs supported OUT files
+        sim_vs_obs_files = ["plantgro.out", "plantn.out", "soilwat.out"]
+        self.statistic_btn.setEnabled(self.file_type == "evaluate" or 
+                                     (self.file_type == "out" and os.path.basename(self.filename).lower() in sim_vs_obs_files))
 
+        # Add widgets to control panel layout
         control_layout.addWidget(self.toggle_legend_btn)
         control_layout.addWidget(self.date_mode_label)
         control_layout.addWidget(self.date_mode_calendar)
@@ -102,14 +133,17 @@ class GraphWindow(QWidget):
         control_panel.setLayout(control_layout)
         control_panel.setFixedWidth(180)
 
+        # Set up main layout
         main_layout = QHBoxLayout()
         main_layout.addWidget(self.canvas)
         main_layout.addWidget(control_panel)
         self.setLayout(main_layout)
 
+        # Initialize legend state and plot
         self.legend_visible = True
         self.refresh_plot()
 
+        # Connect button actions
         self.print_btn.clicked.connect(lambda: print_graph(self.canvas, self))
         if self.plot_type == "time series":
             if self.file_type == "t":
@@ -126,11 +160,13 @@ class GraphWindow(QWidget):
             self.export_excel_btn.clicked.connect(lambda: export_data_to_excel_evaluate(self.plot_data, self))
 
     def toggle_legend(self):
+        """Toggle the visibility of the plot legend."""
         self.legend_visible = not self.legend_visible
         self.refresh_plot()
         self.toggle_legend_btn.setText("Show Legend" if not self.legend_visible else "Hide Legend")
 
     def refresh_plot(self):
+        """Refresh the plot based on the current plot type and settings."""
         if self.plot_type == "time series":
             use_calendar_mode = self.date_mode_calendar.isChecked() if self.enable_date_mode else True
             plot_time_series(self.figure, self.plot_data, use_calendar_mode, self.legend_visible)
@@ -143,10 +179,12 @@ class GraphWindow(QWidget):
 
     def show_statistics(self):
         """Display a table of statistics for the selected variables."""
+        # Create dialog for statistics
         dialog = QDialog(self)
         dialog.setWindowTitle("Statistical Analysis")
         dialog.setGeometry(150, 150, 800, 400)
 
+        # Create table for statistics
         table = QTableWidget()
         table.setRowCount(len(self.plot_data))
         table.setColumnCount(12)
@@ -156,6 +194,7 @@ class GraphWindow(QWidget):
             "d-stat", "Used Obs.", "Total Number"
         ])
 
+        # Populate table with statistics
         for row, data in enumerate(self.plot_data):
             variable_name = data['label'].split(" (")[0]
             observed, simulated = get_variable_data(self.data, variable_name)
@@ -166,12 +205,27 @@ class GraphWindow(QWidget):
                     item = QTableWidgetItem(str(value))
                     table.setItem(row, col + 1, item)
 
+        # Set up dialog layout
         layout = QVBoxLayout()
         layout.addWidget(table)
         dialog.setLayout(layout)
         dialog.exec_()
         
 def open_graph_window(plot_data, plot_type, data, variables_group, runs_group, filename, parent=None):
+    """Open a new graph window with the speified plot data and settings.
+    
+    Args:
+        plot_data (list): Data for plotting (format depends on plot_type).
+        plot_type (str): Type of plot ("time series", "scatter plot", or "evaluate data").
+        data (list): Raw data for satistics and processing.
+        variables_group (list): Selected variables for display.
+        runs_group (list): Selected runs for display.
+        filename (str): Path to the data file.
+        parent: Parent widget for the window.
+
+        Returns:
+            GraphWindow: The created graph window instance.
+        """
     window = GraphWindow(plot_data, plot_type, data, variables_group, runs_group, filename, parent)
     window.show()
     return window

@@ -22,11 +22,20 @@ except ImportError:
     from ui.graph_window import GraphWindow
     
 class EvaluateVarSelectionDialog(QDialog):
+    """Dialog for selecting variables to evaluate and displaying their graphs"""
     def __init__(self, selected_files, parent=None):
+        """Initialize the dialog with file selection UI setup.
+        
+        Args:
+            selected_files (list): List of file paths to process.
+            parent: Parent widget for the dialog.
+            """
         super().__init__(parent)
+        # Set dialog properties
         self.setWindowTitle("Evaluate Variable Selection")
         self.setGeometry(200, 200, 800, 600)
 
+        # Store selected files and initialize data containers
         self.selected_files = selected_files
         self.data = []
         self.plot_data = []
@@ -109,20 +118,23 @@ class EvaluateVarSelectionDialog(QDialog):
 
         self.setLayout(self.main_layout)
 
+        # Load data to initialize the UI
         self.reload_data()
         self.display_data()
 
     def preview_file(self):
-        """Preview the content of the first selected file or prompt if none selected."""
+        """Preview the content of the first file selected in a dialog."""
         if not self.selected_files:
             QMessageBox.warning(self, "Warning!", "No files selected to preview.")
             return
 
+        # Read and display content of the first file
         file_path = self.selected_files[0]
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_content = file.read()
 
+            # Create preview dialog
             preview_dialog = QDialog(self)
             preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
             preview_dialog.setGeometry(250, 250, 600, 400)
@@ -156,9 +168,11 @@ class EvaluateVarSelectionDialog(QDialog):
             self.variables_layout.addStretch()
             return
 
+        # Extract variables from data
         _, variables = extract_runs_and_variables(self.data)
         print(f"All variables from data: {variables}")
 
+        # Load variable names from DATA.CDE
         try:
             from utils.cde_data_parser import parse_data_cde
             variable_map = parse_data_cde()
@@ -168,6 +182,7 @@ class EvaluateVarSelectionDialog(QDialog):
             QMessageBox.warning(self, "Warning", "DATA.CDE file not found. Variables will be displayed as acronyms.")
             variable_map = {}
 
+        # Get unique variables 
         seen = set()
         unique_vars = []
         for var in sorted(variables):
@@ -197,6 +212,11 @@ class EvaluateVarSelectionDialog(QDialog):
         self.variables_scroll.update()
         
     def clear_layout(self, layout):
+        """Recursively clear all widgets and sub-layouts from a layout.
+        
+        Args:
+            layout: PyQt5 layout to clear
+        """
         if layout is None:
             return
 
@@ -218,6 +238,7 @@ class EvaluateVarSelectionDialog(QDialog):
 
     def reload_data(self):
         """Reload data from the files and refresh the UI."""
+        # Load data from files
         self.data, error = load_all_file_data(self.selected_files)
         if error:
             QMessageBox.warning(self, "Error", error)
@@ -226,6 +247,7 @@ class EvaluateVarSelectionDialog(QDialog):
 
     def show_graph_tab(self):
         """Prepare plot data and switch to the graph tab."""
+        # Get selected variables
         selected_vars = []
         for checkbox in self.variables_widget.findChildren(QCheckBox):
             if checkbox.isChecked():
@@ -236,6 +258,7 @@ class EvaluateVarSelectionDialog(QDialog):
                     cde = text.strip()
                 selected_vars.append(cde)
 
+        # Validate data and selections 
         if not self.data:
             QMessageBox.warning(self, "Warning!", "No data available to create a graph (using mock data or API down).")
             return
@@ -273,6 +296,7 @@ class EvaluateVarSelectionDialog(QDialog):
                 else:
                     print(f"Warning: No valid data for {cde}")
 
+        # Validate file selection
         filename = self.selected_files[0] if self.selected_files else None
         if filename is None:
             QMessageBox.warning(self, "Warning!", "No file selected to display graph.")
@@ -304,12 +328,23 @@ class EvaluateVarSelectionDialog(QDialog):
         self.tab_widget.setCurrentIndex(0)
 
     def get_selections(self):
-        """Return the selected variables."""
+        """Return the list of selected variables.
+        
+        Returns: 
+            list: Selected variable names."""
         selected_vars = [checkbox.text() for checkbox in self.variables_widget.findChildren(QCheckBox) if checkbox.isChecked()]
         return selected_vars, self.data
 
 def open_evaluate_var_selection(selected_files, parent=None):
-    """Open the evaluate variable selection dialog and return the selections."""
+    """Open the evaluate variable selection dialog and return the selections.
+    
+    Args:
+        selected_files (list): List of file paths to process.
+        parent: Parent widget for the dialog.
+    
+    Returns: 
+        tuple: (selected variables, data) if accepted, (None, None) if rejected.
+    """
     dialog = EvaluateVarSelectionDialog(selected_files, parent)
     center_window_on_parent(dialog, parent)
     if dialog.exec_():
@@ -317,6 +352,12 @@ def open_evaluate_var_selection(selected_files, parent=None):
     return None, None
 
 def center_window_on_parent(window, parent):
+    """Center the window relative to its parent or screen.
+    
+    Args:
+        window: PyQt5 window to center.
+        parent: Parent widget or None to use screen center.
+    """
     if parent is None:
         screen = QApplication.primaryScreen()
         screen_geometry = screen.availableGeometry()
@@ -329,6 +370,7 @@ def center_window_on_parent(window, parent):
     window.move(geo.topLeft())
 
 if __name__ == "__main__":
+    """Run the dialog as a standalone application for testing."""
     from PyQt5.QtWidgets import QApplication
     import sys
     app = QApplication(sys.argv)

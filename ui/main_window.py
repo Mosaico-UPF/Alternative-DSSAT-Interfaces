@@ -21,12 +21,15 @@ except ImportError:
     from ui.options_menu import OptionsDialog
 
 class MainWindow(QMainWindow):
+    """Main application window for the DSSAT Output Viewer."""
     def __init__(self):
+        """Initialize the main window logo, tittle, and menu bar."""
         super().__init__()
+        # Set window properties
         self.setWindowTitle("DSSAT Output Viewer - Main Window")
         self.resize(900, 600)
 
-        # Central widget setup
+        # Set up central widget and main layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
@@ -65,7 +68,8 @@ class MainWindow(QMainWindow):
         # Store selected files and current graph type
         self.selected_files = []
         self.current_graph_type = "Time Series"
-        self.show_var_selection = False  # Flag to control dialog opening
+        self.show_var_selection = False 
+        self.last_dir = None             
 
         # Menu bar
         menubar = self.menuBar()
@@ -102,17 +106,21 @@ class MainWindow(QMainWindow):
         support_action.triggered.connect(lambda: QMessageBox.information(self, "Help", "Technical support info here"))
 
         about_action = help_menu.addAction("About")
-        about_action.triggered.connect(lambda: QMessageBox.information(self, "About", "DSSAT Viewer v1.0\nBy You"))
+        about_action.triggered.connect(lambda: QMessageBox.information(self, "About", "Alternative GBuild UI v1.0\nBy Fred (for now, at least)"))
 
     def open_file(self):
         """Open the file selector and load the time series selection by default."""
-        selected_files = open_file_selector(self)
+        # Open file selctor with last used directory
+        selected_files, current_dir = open_file_selector(self, initial_dir=self.last_dir)
         if selected_files:
             self.selected_files = selected_files
+            self.last_dir = current_dir
             self.current_graph_type = "Time Series"  # Default
             self.switch_graph_type()
         else:
+            self.last_dir = current_dir 
             self.clear_graph_selection()
+
 
 
 
@@ -122,34 +130,37 @@ class MainWindow(QMainWindow):
         #can be ignored, since the graphtype comes from Options Dialog or Default
         self.clear_graph_selection()
 
+        # Open variable selection dialog if requested 
         if self.show_var_selection:
             if self.current_graph_type == "Time Series":
                 runs, vars, data = open_time_series_var_selection(self.selected_files, self)
                 if runs is not None and vars is not None:
-                    pass  
+                    pass  # Placeholder for future graph display logic
                 else:
-                    pass
+                    pass # Placeholder for handling no selection
             elif self.current_graph_type == "Scatter Plot":
                 runs, (x_vars, y_vars), data = open_scatter_var_selection(self.selected_files, self)
                 if runs and x_vars and y_vars:
-                    pass
+                    pass # Placeholder for future graph display logic
                 else:
-                    pass
+                    pass # Placeholder for handling no selection
             elif self.current_graph_type == "Evaluate":
                 vars, data = open_evaluate_var_selection(self.selected_files, self)
                 if vars is not None and data is not None:
-                    pass
+                    pass # Placeholder for future graph display logic
                 else:
-                    pass
+                    pass # Placeholder for handling no selection
             else:
-                pass
+                pass # Placeholder for unsupported graph types
             self.show_var_selection = False
         else:
             pass
+            # Note: Commented-out print statement for debugging
             # print(f"Selected graph type: {self.current_graph_type}. Click 'Variable Selection' to configure.")
 
+
     def clear_graph_selection(self):
-        """Clear the current graph selection UI."""
+        """Clear all widgets from the graph selection layout."""
         for i in reversed(range(self.graph_selection_layout.count())):
             widget = self.graph_selection_layout.itemAt(i).widget()
             if widget:
@@ -164,7 +175,8 @@ class MainWindow(QMainWindow):
         self.switch_graph_type()
 
     def show_options(self):
-        """Display the options dialog with a collapsible menu for plot types."""
+        """Open the options dialog to select plot type."""
+        # Create and show options dialog
         dialog = OptionsDialog(self)
         if dialog.exec_():
             selected_type = dialog.get_plot_type()
@@ -180,6 +192,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Warning", f"Plot type {selected_type} not implemented yet.")
 
 if __name__ == "__main__":
+    """Run the main window as a standalone application for testing."""
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()

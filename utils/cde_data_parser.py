@@ -38,10 +38,10 @@ def parse_data_cde(path="C:/DSSAT48/DATA.CDE"):
                     description = description[len(label):].strip()
                     if not description or description == '.':
                         description = label
-                        print(f"Warning: DESCRIPTION starts with LABEL for {acronym}, using LABEL: {label}")
+                        #print(f"Warning: DESCRIPTION starts with LABEL for {acronym}, using LABEL: {label}")
                 elif not description or description == '.':
                     description = label
-                    print(f"Warning: Empty or invalid DESCRIPTION for {acronym}, using LABEL: {label}")
+                    #print(f"Warning: Empty or invalid DESCRIPTION for {acronym}, using LABEL: {label}")
                 variable_map[acronym] = description
             else:
                 print(f"Warning: Could not parse line: {line}")
