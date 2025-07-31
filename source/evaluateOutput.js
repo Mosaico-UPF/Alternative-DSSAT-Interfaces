@@ -2,6 +2,7 @@ const OUTPUT_FILE_EXT = '.OUT';
 const START_HEADER_DELIMITER = '@';
 const BLANK_SPACE_DELIMITER = " ";
 const EMPTY_DELIMITER = "";
+const pathModule = require('path');
 
 class EvaluateOutput {
     constructor(fs, globalBasePath, cdeInstance) {
@@ -18,10 +19,10 @@ class EvaluateOutput {
     }
 
     getOutFiles(crop) {
-        let path = this._globalBasePath + crop;
-        let cropFolderContent = this._fs.readdirSync(path);
+        const folderPath = pathModule.join(this._globalBasePath, crop);
         let outFiles = [];
         try {
+            const cropFolderContent = this._fs.readdirSync(folderPath);
             for (let i = 0; i < cropFolderContent.length; i++) {
                 if (cropFolderContent[i].endsWith(OUTPUT_FILE_EXT) && cropFolderContent[i].toLowerCase().includes('evaluate')) {
                     outFiles.push(cropFolderContent[i]);
@@ -34,17 +35,23 @@ class EvaluateOutput {
     }
 
     read(crop, outFile) {
-        let path = this._globalBasePath + crop + "/" + outFile;
-        let data;
-        try {
-            data = this._fs.readFileSync(path, 'utf8');
-        } catch (error) {
-            console.error(`Error reading file ${path}:`, error);
+        const filePath = pathModule.join(this._globalBasePath, crop, outFile);
+
+        if (!this._fs.existsSync(filePath)) {
+            console.warn(`[EvaluateOutput] File not found: ${filePath}`);
             return { results: [], timeField: null };
         }
 
-        let lines = data.toString().split(/[\r\n]+/g).filter(line => line.trim() !== '');
-        
+        let data;
+        try {
+            data = this._fs.readFileSync(filePath, 'utf8');
+        } catch (error) {
+            console.error(`Error reading file ${filePath}:`, error);
+            return { results: [], timeField: null };
+        }
+
+        let lines = data.toString().split(/[\n]+/g).filter(line => line.trim() !== '');
+
         let headers = [];
         let results = [];
         const cdeData = this._cdeInstance.load();
@@ -85,7 +92,7 @@ class EvaluateOutput {
                     // Group headers by base name
                     let headerGroups = {};
                     headers.forEach((header, index) => {
-                        const baseHeader = header.replace(/(S|M)$/, ''); // Remove S or M suffix
+                        const baseHeader = header.replace(/(S|M)$/, '');
                         if (!headerGroups[baseHeader]) {
                             headerGroups[baseHeader] = {};
                         }
@@ -110,7 +117,6 @@ class EvaluateOutput {
                         let simulated = null, measured = null;
                         if (group[baseHeader + 'S']) simulated = group[baseHeader + 'S'].value;
                         if (group[baseHeader + 'M']) measured = group[baseHeader + 'M'].value;
-                        // Use simulated as fallback if measured is null
                         if (measured === null && simulated !== null) measured = simulated;
                         record[baseHeader] = {
                             simulated: simulated,

@@ -2,16 +2,17 @@ const express = require('express')
 const jdssat = require('./jdssat')
 const app = express()
 const port = 3000
+const simVsObs = require('./source/simVsObs');
 
-app.get('/', (req, res) => res.send('server is up and running'))
+app.get('/', (request, response) => response.send('server is up and running'))
 
 app.listen(port, function() {
     console.log(`app listening on port ${port}!`)
 })
 
-app.use(function (req, res, next) {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+app.use(function (request, response, next) {
+    response.header("Access-Control-Allow-Origin", "*");
+    response.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 })
 
@@ -161,3 +162,15 @@ app.get('/api/evaluate/:crop/:file', (request, response) => {
         response.status(500).json({ error: 'Error reading evaluate file' });
     }
 });
+app.get('/api/sim-vs-obs/:crop/:outfile', async (req, res) => {
+  const crop = req.params.crop;                
+  const outFile = req.params.outfile;          
+  try {
+    const result = await simVsObs.loadSimVsObsFromOutFile(crop, outFile);
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to load Simulated vs Observed data.' });
+  }
+});
+
