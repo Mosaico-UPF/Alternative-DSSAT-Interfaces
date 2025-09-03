@@ -1,4 +1,3 @@
-# C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\ui\graph_window.py
 import sys
 import os
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QRadioButton, QButtonGroup, QLabel, QSizePolicy, QDialog, QTableWidget, QTableWidgetItem
@@ -67,9 +66,11 @@ class GraphWindow(QWidget):
         self.plot_type = plot_type.lower()
 
         # Enable date mode for time series with .out files.
-        self.enable_date_mode = (self.plot_type == "time series" and any(
-            entry.get("file_type") == "out" for entry in data if isinstance(entry, dict)
-        ))
+        self.enable_date_mode = (
+            self.plot_type == "time series"
+            and any(str(entry.get("file_type", "")).lower() in ("out", "t", "merged")
+                    for entry in data if isinstance(entry, dict))
+        )
 
         # Set window properties
         self.setWindowTitle(f"{plot_type.title()} Graph Window")

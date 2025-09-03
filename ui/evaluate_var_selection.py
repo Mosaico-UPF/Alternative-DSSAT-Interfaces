@@ -272,11 +272,24 @@ class EvaluateVarSelectionDialog(QDialog):
         # Aggregate values for each variable across runs
         all_values = defaultdict(lambda: {'simulated': [], 'measured': []})
         for entry in self.data:
-            values = entry.get('values', {})
-            for cde, value_dict in values.items():
-                if value_dict['type'] == 'combined':
-                    all_values[cde]['simulated'].append(value_dict['simulated'])
-                    all_values[cde]['measured'].append(value_dict['measured'])
+            values = entry.get('values', [])
+            # Group values by CDE
+            cde_values = defaultdict(lambda: {'simulated': None, 'measured': None})
+            for value_dict in values:
+                cde = value_dict.get('cde')
+                if not cde:
+                    continue
+                if value_dict.get('type') == 'simulated' and value_dict.get('values'):
+                    cde_values[cde]['simulated'] = value_dict['values'][0]  # Single value for evaluate files
+                elif value_dict.get('type') == 'measured' and value_dict.get('values'):
+                    cde_values[cde]['measured'] = value_dict['values'][0]  # Single value for evaluate files
+
+            # Transfer grouped values to all_values
+            for cde, vals in cde_values.items():
+                if vals['simulated'] is not None:
+                    all_values[cde]['simulated'].append(vals['simulated'])
+                if vals['measured'] is not None:
+                    all_values[cde]['measured'].append(vals['measured'])
 
         # Process each selected variable
         for cde in selected_vars:
@@ -288,11 +301,14 @@ class EvaluateVarSelectionDialog(QDialog):
                     y_measured = x_simulated[:len(x_simulated)]
                 if x_simulated or y_measured:  # Plot if either is available
                     self.plot_data.append({
-                        'x': x_simulated if x_simulated else y_measured,  # Use simulated or measured as x
-                        'y': y_measured if y_measured else x_simulated,   # Use measured or simulated as y
-                        'y_expected': y_measured if y_measured else x_simulated,
-                        'label': f'{cde} (Simulated vs Measured)'
+                        "x": x_simulated if x_simulated else y_measured,
+                        "y": y_measured if y_measured else x_simulated,
+                        "y_expected": y_measured if y_measured else x_simulated,
+                        "label": f"{cde} (Simulated vs Measured)",
+                        "run": entry.get("run", "Unknown"),
+                        "variable": cde
                     })
+
                 else:
                     print(f"Warning: No valid data for {cde}")
 

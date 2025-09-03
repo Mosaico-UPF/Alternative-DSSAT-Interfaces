@@ -2,88 +2,141 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.font_manager as fm
 import itertools
+from datetime import datetime
 
-def build_plot_data(data, variable, run=None, use_calendar=True):
-    """Build plot data for a specific variable, optionally filtered by run, with x-values in calendar or
-    DAP (Days After Planting) mode.
-
-    Args:
-        data (list): List of data entries containing run, values, and variable information.
-        variable (str): Variable code to filter data (e.g., 'cde').
-        run (str, optional): Specific run to filter data. If None, all runs are included.
-        use_calendar (bool): True to use calendar days mode, False to use DAP.
-    Returns:
-        list: List of dictionaries with x_calendar, y, label and type for plotting.
+def build_plot_data(data, variable_cde, run=None, use_calendar=True):
     """
-    # Initialize dictionary to group data by run, variable and type.
-    grouped = {}  
+    Build plot data entries for a given variable (CDE) and optional run filter.
+    Always computes both calendar x-values (datetimes) and DAP x-values.
+    The `use_calendar` flag is ignored for construction and only used by the plotter to pick an axis.
+    """
+    def _parse_date(d):
+        # Accept iso strings or already-datetime
+        if isinstance(d, datetime):
+            return d
+        if isinstance(d, str):
+            try:
+                # support YYYY-MM-DD; ignore index- placeholders
+                if d.lower().startswith("index-"):
+                    return None
+                return datetime.fromisoformat(d)
+            except Exception:
+                return None
+        return None
 
-    # Iterate through data entries.
-    for entry in data:
-        # Skip entries not matching the specific run, if provided.
-        if run and entry.get("run") != run:
+    plot_groups = []
+    # Determine a planting date per run
+    planting_date_by_run = {}
+
+    # First pass: discover planting dates
+    for entry in (e for e in data if isinstance(e, dict)):
+        entry_run = entry.get("run", "Unknown")
+        if run and entry_run != run:
+            continue
+        if entry_run in planting_date_by_run:
             continue
 
-        entry_run = entry.get("run")
-        values = entry.get("values", [])
+        # Prefer PDAT if present with dates
+        pdat_dates = []
+        for v in entry.get("values", []):
+            if v.get("cde", "").upper() == "PDAT":
+                for d in (v.get("x_calendar") or []):
+                    dt = _parse_date(d)
+                    if dt:
+                        pdat_dates.append(dt)
+                break
+        if pdat_dates:
+            planting_date_by_run[entry_run] = min(pdat_dates)
+            continue
 
-        # Process each variable entry in the values list.
-        for var_entry in values:
-            # Skip if variable code doesn't match.
-            if var_entry.get("cde") != variable:
+        # Fallback: earliest date across any variable’s x_calendar in this run
+        all_dates = []
+        for v in entry.get("values", []):
+            for d in (v.get("x_calendar") or []):
+                dt = _parse_date(d)
+                if dt:
+                    all_dates.append(dt)
+        planting_date_by_run[entry_run] = min(all_dates) if all_dates else None
+
+    # Second pass: build series for requested variable
+    for entry in (e for e in data if isinstance(e, dict)):
+        entry_run = entry.get("run", "Unknown")
+        if run and entry_run != run:
+            continue
+
+        for var in entry.get("values", []):
+            cde = var.get("cde")
+            if (cde or "").upper() != (variable_cde or "").upper():
                 continue
-            
-            # Extract type, values, x_calendar.
-            val_type = var_entry.get("type")
-            val_values = var_entry.get("values", [])
-            x_calendar = var_entry.get("x_calendar", [])
 
-            # Create unique key for grouping.
-            key = (entry_run, variable, val_type)
-            if key not in grouped:
-                grouped[key] = {
-                    "x": [],
-                    "y": [],
-                    "label": f"{variable} ({entry_run})",
-                    "type": val_type
-                }
+            y_vals = var.get("values") or []
+            if not y_vals:
+                continue
 
-            # Use calendar dates or DAP for x-values
-            x_vals = x_calendar if use_calendar else list(range(1, len(val_values) + 1))
-            grouped[key]["x"].extend(x_vals)
-            grouped[key]["y"].extend(val_values)
+            # Skip single-value entries without calendar (e.g., measuredFinal summary values)
+            raw_calendar = var.get("x_calendar") or []
+            if not raw_calendar and len(y_vals) == 1:
+                print(f"Skipping summary value without date for {cde} ({var.get('type')}) in run {entry_run}")
+                continue
 
-    # Convert grouped data to list of plot data dictionaries.
-    plot_data = []
-    for group in grouped.values():
-        plot_data.append({
-            "x_calendar": group["x"],
-            "y": group["y"],
-            "label": group["label"],
-            "type": group["type"]
-        })
-    return plot_data
+            # Parse x_calendar; if missing, try to use a best-effort range
+            x_calendar_dates = [_parse_date(d) for d in raw_calendar]
+            # Keep alignment
+            n = min(len(y_vals), len(x_calendar_dates)) if x_calendar_dates else len(y_vals)
+            y_vals = y_vals[:n]
+            x_calendar_dates = x_calendar_dates[:n] if x_calendar_dates else [None] * n
 
+            # Compute DAP using per-run planting date; fall back to index if we lack dates
+            pdate = planting_date_by_run.get(entry_run)
+            if pdate and any(x_calendar_dates):
+                x_dap = [ (d - pdate).days if isinstance(d, datetime) else None for d in x_calendar_dates ]
+                # If a point lacks a date, fall back to index at that position
+                x_dap = [i if x is None else x for i, x in enumerate(x_dap)]
+            else:
+                # No usable dates → index-based DAP
+                x_dap = list(range(n))
+
+            # Filter out points where y is None
+            valid = [i for i in range(n) if y_vals[i] is not None]
+            if not valid:
+                print(f"Skipping {cde} ({var.get('type')}) in run {entry_run} due to no valid y values")
+                continue
+            x_calendar_dates = [x_calendar_dates[i] for i in valid]
+            x_dap = [x_dap[i] for i in valid]
+            y_vals = [y_vals[i] for i in valid]
+
+            plot_groups.append({
+                "x_calendar": x_calendar_dates,
+                "x_dap": x_dap,
+                "y": y_vals,
+                "label": f"{cde} ({var.get('type')}) ({entry_run})",
+                "type": var.get("type", "simulated"),
+                "run": entry_run,
+                "variable": cde
+            })
+
+    return plot_groups
+
+def _get_color_map(plot_data):
+    """Assign distinct colors based on (variable, run) combinations."""
+    keys = list(dict.fromkeys([
+        (data.get("variable", data["label"].split()[0]), data.get("run", "Unknown"))
+        for data in plot_data
+    ]))
+    # Use Set1 for up to 9 distinct keys; otherwise fallback to tab20b+tab20c
+    if len(keys) <= 9:
+        base_colors = plt.cm.get_cmap("Set1").colors
+    else:
+        base_colors = plt.cm.get_cmap("tab20b").colors + plt.cm.get_cmap("tab20c").colors
+    colors = itertools.cycle(base_colors)
+    return {key: next(colors) for key in keys}
 
 def _apply_legend(ax, figure, plot_data, legend_visible):
-    """Apply or remove the legend with custom formatting to the plot
-    
-    Args:
-        ax: Matplotlib axis object.
-        figure: Matplotlib figure object.
-        plot_data (list): List of plot data dictionaries for legend labels.
-        legend_visible (bool): True to show legend, False to hide it.
-        """
-    # Add legend with custom formatting
+    """Apply or remove the legend with custom formatting."""
     figure.subplots_adjust(bottom=0.25)
-
     if legend_visible:
-        # Calculate number of columns for legend (max 4, min 1)
-        ncol = min(4, max(1, len(plot_data)//2)) 
-        # Set small font size for legend
+        ncol = min(4, max(1, len(plot_data) // 2))
         small_font = fm.FontProperties(size=7)
-
-        # Add legend with custom format
         ax.legend(
             loc='upper center',
             bbox_to_anchor=(0.5, -0.2),
@@ -95,152 +148,123 @@ def _apply_legend(ax, figure, plot_data, legend_visible):
             labelspacing=0.2
         )
     else:
-        # Remove legend if not visible
-        ax.legend().remove()
-
+        if ax.get_legend():
+            ax.get_legend().remove()
 
 def plot_time_series(figure, plot_data, use_calendar_mode=True, legend_visible=True):
-    """Plot time series data with simulated lines and measured scatter points.
-    
-    Args:
-        figure: Matplotlib figure object to plot on.
-        plot_data (list): List of dictionaries with x_calendar, y, label, and type.
-        use_calendar_mode (bool): True for calendar dates, False for DAP.
-        legend_visible: Enables the legend when True, disables when false
-    """
-    
-    # Clear figure and create new subplot
+    """Plot time series data with simulated lines and measured scatter points."""
     figure.clear()
     ax = figure.add_subplot(111)
 
-    # Extract unique variable labels and assign colors
-    labels = [data['label'].split(' (')[0] for data in plot_data]
-    unique_labels = list(dict.fromkeys(labels))
-    colors = itertools.cycle(plt.cm.tab10.colors)
-    label_to_color = {label: next(colors) for label in unique_labels}
+    key_to_color = _get_color_map(plot_data)
 
-    # Plot each dataset
     for data in plot_data:
-        # Select x-values based on mode
-        x_values = data['x_calendar'] if use_calendar_mode else data.get('x_dap', data['x_calendar'])
+        x_values = data['x_calendar'] if use_calendar_mode else data['x_dap']
         y_values = data['y']
         label = data['label']
-        cde = label.split(' (')[0]
         plot_type = data.get('type', 'simulated')
-        color = label_to_color[cde]
+        run = data.get('run', 'Unknown')
+        var = data.get('variable', data['label'].split()[0])
+        color = key_to_color[(var, run)]
 
-        # validate data
         if not x_values or not y_values or len(x_values) != len(y_values):
             print(f"Warning: Invalid data for {label}: x={len(x_values)}, y={len(y_values)}")
             continue
-        
-        # Warn if all DAP values are 0 for measured data
-        if not use_calendar_mode and plot_type == 'measured' and all(x == 0 for x in x_values):
-            print(f"Warning: All x_dap values are 0 for measured data {label}. Check DAP calculation or planting date.")
 
-        # Plot measured data as scatter, simulated as line
+        valid_pairs = [(x, y) for x, y in zip(x_values, y_values) if x is not None and y is not None]
+        if not valid_pairs:
+            print(f"Warning: No valid data for {label}")
+            continue
+        x_values, y_values = zip(*valid_pairs)
+
+        if not use_calendar_mode and plot_type == 'measured' and all(x == 0 for x in x_values):
+            print(f"Warning: All x_dap values are 0 for {label}. Check DAP calculation or planting date.")
+
         if plot_type == 'measured':
             ax.scatter(x_values, y_values, label=label, color=color, marker='o', alpha=0.6)
         else:
             ax.plot(x_values, y_values, label=label, color=color, linestyle='-')
 
-    # Set axis labels
     ax.set_xlabel('Calendar Day' if use_calendar_mode else 'Days After Planting')
     ax.set_ylabel('Value')
     ax.grid(True)
 
-    # Format x-axis for calendar mode
     if use_calendar_mode:
         try:
-            if x_values and not all(isinstance(x, (int, float)) for x in x_values):
+            if x_values and any(isinstance(x, datetime) for x in x_values):
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 figure.autofmt_xdate()
+            else:
+                ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{int(x)}"))
         except Exception as e:
             print(f"Error formatting dates for calendar mode: {e}")
             ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{int(x)}"))
 
-    # Apply legend formatting
     _apply_legend(ax, figure, plot_data, legend_visible)
-    # Redraw canvas
     figure.canvas.draw()
-
-
-def plot_scatter(figure, plot_data, legend_visible=True):
-    """ Plot scatter data with x and y values for each dataset.
-    
-    Args:
-        figure: Matplotlib figure object to plot on.
-        plot_data (list): List of tuples containing (x_values, y_values, label)
-        legend_visible (bool): True to show legend, False to hide it.    
-    """
-    # Clear figure and create new subplot
-    figure.clear()
-    ax = figure.add_subplot(111)
-
-    # Plot each dataset as scatter
-    for x_values, y_values, label in plot_data:
-        ax.scatter(x_values, y_values, label=label)
-
-    # Set axis labels
-    ax.set_xlabel('X-Axis Variable')
-    ax.set_ylabel('Y-Axis Variable')
-    ax.grid(True)
-
-    # Apply legend formatting
-    _apply_legend(ax, figure, plot_data, legend_visible)
-    # Redraw canvas
-    figure.canvas.draw()
-
 
 def plot_evaluate(figure, plot_data, legend_visible=True):
-    """Plot evaluation scatter data comparing simulated vs measured values with optional expected values.
-    
-    Args: 
-        figure: Matplotlib figure object to plot on.
-        plot_data (list): List of dictionaries with x, y, y_expected, and label.
-        legend_visible (bool): True to show legend, False to hide it.
-    """
-    # Clear figure and create new subplot
+    """Plot evaluation scatter data."""
     figure.clear()
     ax = figure.add_subplot(111)
 
-    # Assign unique markers and colors to labels
-    marker_styles = ['s', '^', '+', '*', 'o', 'D', 'v', '<', '>']
-    labels = [data['label'] for data in plot_data]
-    unique_labels = list(dict.fromkeys(labels))
-    label_to_marker = {label: marker_styles[i % len(marker_styles)] for i, label in enumerate(unique_labels)}
-    colors = itertools.cycle(plt.cm.tab10.colors)
-    label_to_color = {label: next(colors) for label in unique_labels}
+    key_to_color = _get_color_map(plot_data)
 
-    # Plot each dataset
     for data in plot_data:
         x_values = data['x']
         y_values = data['y']
         y_expected = data.get('y_expected', [None] * len(y_values))
         label = data['label']
-        marker = label_to_marker[label]
-        color = label_to_color[label]
+        run = data.get('run', 'Unknown')
+        var = data.get('variable', data['label'].split()[0])
+        color = key_to_color[(var, run)]
 
-        # Filter valid x and y values
-        valid_x = [x for x in x_values if x is not None]
-        valid_y = [y for y in y_values if y is not None]
-        if valid_x and valid_y and len(valid_x) == len(valid_y):
-            ax.scatter(valid_x, valid_y, marker=marker, color=color, label=label, alpha=0.6)
+        valid_pairs = [(x, y) for x, y in zip(x_values, y_values) if x is not None and y is not None]
+        if not valid_pairs:
+            print(f"Warning: No valid data for {label}")
+            continue
+        valid_x, valid_y = zip(*valid_pairs)
 
-        # Filter valid expected y values
-        valid_y_expected = []
-        for i in range(min(len(y_expected), len(y_values))):
-            if y_expected[i] is not None and (i >= len(y_values) or y_expected[i] != y_values[i]):
-                valid_y_expected.append(y_expected[i])
-        valid_x_expected = valid_x[:len(valid_y_expected)] if valid_y_expected else []
-        if valid_y_expected and valid_x_expected:
-            ax.scatter(valid_x_expected, valid_y_expected, marker=marker, facecolors='none', edgecolors=color, label=f'{label} (Expected)', alpha=0.6)
-    # Set axis labels
+        ax.scatter(valid_x, valid_y, marker='o', color=color, label=label, alpha=0.6)
+
+        valid_expected_pairs = [
+            (x, y_exp) for x, y_exp in zip(x_values, y_expected)
+            if x is not None and y_exp is not None and y_exp not in y_values
+        ]
+        if valid_expected_pairs:
+            valid_x_exp, valid_y_exp = zip(*valid_expected_pairs)
+            ax.scatter(valid_x_exp, valid_y_exp, marker='o', facecolors='none', edgecolors=color, label=f'{label} (Expected)', alpha=0.6)
+
     ax.set_xlabel('Simulated Data')
-    ax.set_ylabel('Value')
+    ax.set_ylabel('Measured Data')
     ax.grid(True)
 
-    # Apply legend formatting
     _apply_legend(ax, figure, plot_data, legend_visible)
-    # Redraw canvas
+    figure.canvas.draw()
+
+def plot_scatter(figure, plot_data, legend_visible=True):
+    """Plot scatter data."""
+    figure.clear()
+    ax = figure.add_subplot(111)
+
+    key_to_color = _get_color_map(plot_data)
+
+    for data in plot_data:
+        run = data.get("run", "Unknown")
+        var = data.get("variable", data["label"].split()[0])
+        color = key_to_color[(var, run)]
+        x_values, y_values, label = data["x"], data["y"], data["label"]
+
+        valid_pairs = [(x, y) for x, y in zip(x_values, y_values) if x is not None and y is not None]
+        if not valid_pairs:
+            print(f"Warning: No valid data for {label}")
+            continue
+        valid_x, valid_y = zip(*valid_pairs)
+        ax.scatter(valid_x, valid_y, label=label, color=color)
+
+    ax.set_xlabel('X-Axis Variable')
+    ax.set_ylabel('Y-Axis Variable')
+    ax.grid(True)
+
+    _apply_legend(ax, figure, plot_data, legend_visible)
     figure.canvas.draw()
