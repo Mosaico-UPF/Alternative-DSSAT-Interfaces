@@ -6,6 +6,7 @@ const DATA_PATH_DELIMITER = 'DATA PATH';
 const START_HEADER_DELIMITER = '@';
 const BLANK_SPACE_DELIMITER = " ";
 const EMPTY_DELIMITER = "";
+const { convertToISODate } = require('./utils');
 
 class Output {
     constructor(fs) {
@@ -47,88 +48,95 @@ class Output {
         let result = [];
         let experiment = "";
         let treatmentDescription = "";
-    
-        for (let i = 0; i <= lines.length; i++) {
-          if (i == lines.length) {
-            break;
-        }
-    
+
+        for (let i = 0; i < lines.length; i++) {
           if (lines[i].startsWith(' EXPERIMENT')) {
             experiment = lines[i].substring(18, lines[i].length).split(' ')[0];
           }
-    
+
           if (lines[i].startsWith(' TREATMENT')) {
             let run = lines[i].split(':');
-    
             let treatmentNumber = run[0];
             treatmentDescription = run[1];
-    
-            let treatment = treatmentNumber.toString().replace(TREATMENT_DELIMITER, EMPTY_DELIMITER).trim();
-    
-            let hasTreatment = result.find(item => item.run === treatmentDescription.toString().trim());
-    
-            if (hasTreatment === 'undefined' || !hasTreatment) {
-              let model = { run: treatmentDescription.toString().trim(), experiment: experiment, treatmentNumber: treatment, values: [] };
+            let treatment = treatmentNumber.replace(TREATMENT_DELIMITER, EMPTY_DELIMITER).trim();
+
+            if (!result.find(item => item.run === treatmentDescription.trim())) {
+              let model = { run: treatmentDescription.trim(), experiment: experiment, treatmentNumber: treatment, values: [] };
               result.push(model);
             }
             experiments = [];
-    
-            treatment = treatmentNumber;
             continue;
           }
-    
+
           if (lines[i].startsWith(START_HEADER_DELIMITER)) {
-            headers = [];
-    
-            let arrayHeaders = lines[i].split(BLANK_SPACE_DELIMITER);
-    
-            for (let j = 0; j < arrayHeaders.length; j++) {
-              if (arrayHeaders[j] !== EMPTY_DELIMITER) {
-                headers.push(arrayHeaders[j]);
-              }
-            }
+            headers = lines[i].slice(1).trim().split(BLANK_SPACE_DELIMITER).filter(h => h !== EMPTY_DELIMITER);
             continue;
           }
+
           if (lines[i].startsWith(BLANK_SPACE_DELIMITER) &&
-            this.notEmptyString(lines[i]) &&
-            !lines[i].includes(MODEL_DELIMITER) &&
-            !lines[i].includes(EXPERIMENT_DELIMITER) &&
-            !lines[i].includes(DATA_PATH_DELIMITER) &&
-            !lines[i].includes(TREATMENT_DELIMITER)) {
-            let simulationValues = lines[i].substring(1, lines[i].length);
-            let simulationValuesArray = simulationValues.split(BLANK_SPACE_DELIMITER);
-    
+              this.notEmptyString(lines[i]) &&
+              !lines[i].includes(MODEL_DELIMITER) &&
+              !lines[i].includes(EXPERIMENT_DELIMITER) &&
+              !lines[i].includes(DATA_PATH_DELIMITER) &&
+              !lines[i].includes(TREATMENT_DELIMITER)) {
+            let simulationValues = lines[i].substring(1).trim();
+            let simulationValuesArray = simulationValues.split(BLANK_SPACE_DELIMITER).filter(v => v !== EMPTY_DELIMITER);
+
             let index = 0;
-    
-            for (let k = 0; k < simulationValuesArray.length; k++) {
-              if (simulationValuesArray[k] !== EMPTY_DELIMITER) {
-                let values = [simulationValuesArray[k]];
-                let obj = { cde: headers[index], values: values };
-                if (experiments[index] != undefined) {
-                  experiments[index].values.push(simulationValuesArray[k]);
-                } else {
-                  experiments.push(obj);
-                }
-                index++;
+            for (let k = 0; k < simulationValuesArray.length && index < headers.length; k++) {
+              let values = [simulationValuesArray[k]];
+              let obj = { cde: headers[index], values: values };
+              if (experiments[index]) {
+                experiments[index].values.push(simulationValuesArray[k]);
+              } else {
+                experiments.push(obj);
               }
+              index++;
             }
-    
             result[result.length - 1].values = experiments;
           }
         }
-    
-        return result;
+
+        // Transform to unified format
+        let unifiedResult = [];
+        for (const model of result) {
+            const unified = {
+              run: model.run,
+              treatmentNumber: model.treatmentNumber,
+              experiment: model.experiment,
+              fileType: 'OUT',
+              simulated: {},
+              measuredFinal: {},
+              measuredTimeSeries: {}
+            };
+            const dates = [];
+            const yearIndex = model.values.findIndex(v => v.cde === 'YEAR');
+            const doyIndex = model.values.findIndex(v => v.cde === 'DOY');
+            if (yearIndex !== -1 && doyIndex !== -1) {
+                const years = model.values[yearIndex].values;
+                const doys = model.values[doyIndex].values;
+                for (let dayIdx = 0; dayIdx < Math.min(years.length, doys.length); dayIdx++) {
+                  const date = convertToISODate(years[dayIdx], doys[dayIdx]);
+                  dates.push(date || `index-${dayIdx}`); // Fallback if date invalid
+                }
+            } else {
+                // Fallback: Use index-based "dates" if YEAR/DOY missing
+                const maxLength = Math.max(...model.values.map(v => v.values.length));
+                for (let i = 0; i < maxLength; i++) {
+                  dates.push(`index-${i}`);
+                }
+            }
+            model.values.forEach(varObj => {
+              if (['YEAR', 'DOY', 'DAS', 'DAP'].includes(varObj.cde)) return;
+              unified.simulated[varObj.cde] = {
+                values: varObj.values.map(v => isNaN(parseFloat(v)) ? v : parseFloat(v)),
+                dates
+              };
+            });
+            unifiedResult.push(unified);
+        }
+        return unifiedResult;
     }
-    convertYearDoyToDate(year, doy) {
-      const y = parseInt(year);
-      const d = parseInt(doy);
-      if (isNaN(y) || isNaN(d)) return null;
-  
-      const date = new Date(Date.UTC(y, 0, 1)); 
-      date.setUTCDate(date.getUTCDate() + d - 1);
-  
-      return date.toISOString().split('T')[0]; 
-  }
 }
 
 module.exports = Output;

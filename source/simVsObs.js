@@ -3,6 +3,7 @@ const path = require('path');
 const EvaluateOutput = require('./evaluateOutput');
 const { readTFile } = require('./tfiles');
 const Output = require('./output');
+const { convertToISODate } = require('./utils');
 
 function parseAFile(filePath) {
     const data = fs.readFileSync(filePath, 'utf8');
@@ -62,30 +63,28 @@ async function loadSimVsObsFromOutFile(crop, outFile) {
     const parsedData = outputParser.read(baseDir + '/', crop, outFile);
 
     if (!parsedData || parsedData.length === 0) {
-        //console.error(`No data found in OUT file: ${outFile}`);
         throw new Error("No data found in the OUT file.");
     }
 
     const experiment = parsedData[0].experiment;
-    const trnoMap = {};
+    const resultMap = {};
 
-    // Simulated data from .OUT
+    // Populate simulated from parsed OUT data (assuming refactored to unified model)
     for (const record of parsedData) {
         const trno = record.treatmentNumber;
-        const runName = record.run || `Treatment_${trno}`; // Fallback run name
-        if (!trnoMap[trno]) {
-            trnoMap[trno] = {
-                runName: runName,
-                simulated: {},
-                measured_final: {},
-                measured_time_series: [],
-                excode: experiment,
+        const runName = record.run || `Treatment_${trno}`;
+        if (!resultMap[trno]) {
+            resultMap[trno] = {
+                run: runName,
+                treatmentNumber: trno,
+                experiment: experiment,
+                fileType: 'MERGED',
+                simulated: record.simulated || {},
+                measuredFinal: {},
+                measuredTimeSeries: {}
             };
-        }
-        for (const variable of record.values) {
-            const cde = variable.cde;
-            const values = variable.values;
-            trnoMap[trno].simulated[cde] = values.map(v => parseFloat(v));
+        } else {
+            Object.assign(resultMap[trno].simulated, record.simulated);
         }
     }
 
@@ -94,137 +93,82 @@ async function loadSimVsObsFromOutFile(crop, outFile) {
     const evaluateData = evaluate.read(crop, 'Evaluate.OUT').results || [];
     for (const record of evaluateData) {
         const excode = record.EXCODE?.value?.toUpperCase();
-        if (excode !== experiment.toUpperCase()) {
-            continue;
-        }
+        if (excode !== experiment.toUpperCase()) continue;
         const trno = record.TRNO?.value?.toString();
-        if (!trnoMap[trno]) {
-            trnoMap[trno] = {
-                runName: `Treatment_${trno}`,
+        if (!resultMap[trno]) {
+            resultMap[trno] = {
+                run: `Treatment_${trno}`,
+                treatmentNumber: trno,
+                experiment: excode,
+                fileType: 'MERGED',
                 simulated: {},
-                measured_final: {},
-                measured_time_series: [],
-                excode: excode,
+                measuredFinal: {},
+                measuredTimeSeries: {}
             };
         }
         for (const [key, entry] of Object.entries(record)) {
             if (entry.type === 'combined') {
-                trnoMap[trno].simulated[key] = entry.simulated;
-                trnoMap[trno].measured_final[key] = entry.measured;
+                resultMap[trno].simulated[key] = { values: entry.simulated, dates: [] }; // Assuming no dates in Evaluate; add if needed
+                resultMap[trno].measuredFinal[key] = entry.measured;
             }
         }
     }
 
-    
+    // Measured time-series from T file
     const tFile = findFileByExtension(cropFolder, experiment, 'timeSeries', crop);
     if (tFile) {
         const tData = await new Promise(resolve => readTFile(crop, tFile, resolve));
-        for (const row of tData || []) {
-            const trno = row.run;
-            if (!trnoMap[trno]) {
-                trnoMap[trno] = {
-                    runName: row.runName || row.run || `Treatment_${trno}`,
+        for (const runData of tData || []) {
+            const trno = runData.treatmentNumber;
+            if (!resultMap[trno]) {
+                resultMap[trno] = {
+                    run: runData.run,
+                    treatmentNumber: trno,
+                    experiment: runData.experiment || experiment,
+                    fileType: 'MERGED',
                     simulated: {},
-                    measured_final: {},
-                    measured_time_series: [],
-                    excode: row.experiment || experiment,
+                    measuredFinal: {},
+                    measuredTimeSeries: runData.measuredTimeSeries || {}
                 };
+            } else {
+                Object.assign(resultMap[trno].measuredTimeSeries, runData.measuredTimeSeries);
             }
-            const values = {};
-            row.values.forEach(v => {
-                const cde = v.cde;
-                const val = v.values[0];
-                if (!trnoMap[trno]._observed_series_by_var) {
-                    trnoMap[trno]._observed_series_by_var = {};
-                }
-                if (!trnoMap[trno]._observed_series_by_var[cde]) {
-                    trnoMap[trno]._observed_series_by_var[cde] = {
-                        values: [],
-                        dates: []
-                    };
-                }
-                trnoMap[trno]._observed_series_by_var[cde].values.push(val);
-                trnoMap[trno]._observed_series_by_var[cde].dates.push(row.day);
-
-                values[cde] = val;
-            });
-            trnoMap[trno].measured_time_series.push({ date: row.day, ...values });
-
         }
     }
 
+    // Measured final from A file
     const aFile = findFileByExtension(cropFolder, experiment, 'summary', crop);
     if (aFile) {
         const aPath = path.join(cropFolder, aFile);
         const aData = parseAFile(aPath);
         for (const [trno, values] of Object.entries(aData)) {
-            if (!trnoMap[trno]) {
-                trnoMap[trno] = {
-                    runName: `Treatment_${trno}`,
+            if (!resultMap[trno]) {
+                resultMap[trno] = {
+                    run: `Treatment_${trno}`,
+                    treatmentNumber: trno,
+                    experiment: experiment,
+                    fileType: 'MERGED',
                     simulated: {},
-                    measured_final: {},
-                    measured_time_series: [],
-                    excode: experiment,
+                    measuredFinal: {},
+                    measuredTimeSeries: {}
                 };
             }
-            Object.assign(trnoMap[trno].measured_final, values);
+            for (const [cde, val] of Object.entries(values)) {
+                resultMap[trno].measuredFinal[cde] = val; // Single value
+            }
         }
     }
 
-    // Create a map keyed by runName for frontend compatibility
-    const runNameMap = {};
-    for (const [trno, data] of Object.entries(trnoMap)) {
-        if (data.runName) {
-            runNameMap[data.runName] = data;
+    // For consistency, ensure measuredFinal uses {value: X} if not already
+    Object.values(resultMap).forEach(run => {
+        for (const [cde, val] of Object.entries(run.measuredFinal)) {
+            if (typeof val !== 'object') {
+                run.measuredFinal[cde] = { value: val };
+            }
         }
-    }
+    });
 
-    const formattedResults = [];
-
-for (const [trno, data] of Object.entries(trnoMap)) {
-    const run = data.runName || trno;
-    const formatted = {
-        run,
-        experiment: data.excode,
-        file_type: 'out',
-        values: []
-    };
-
-    // Simulated
-    for (const [cde, values] of Object.entries(data.simulated)) {
-        formatted.values.push({
-            cde,
-            values,
-            type: 'simulated'
-        });
-    }
-
-    // Measured (final)
-    for (const [cde, val] of Object.entries(data.measured_final)) {
-        formatted.values.push({
-            cde,
-            values: Array.isArray(val) ? val : [val],
-            type: 'measured'
-        });
-    }
-
-    // Measured (time series with x_calendar)
-    const obsSeries = data._observed_series_by_var || {};
-    for (const [cde, obj] of Object.entries(obsSeries)) {
-        formatted.values.push({
-            cde,
-            values: obj.values,
-            x_calendar: obj.dates,
-            type: 'measured'
-        });
-    }
-
-    formattedResults.push(formatted);
-}
-
-    const result = { ...trnoMap, ...runNameMap };
-    //console.log(`Sim-vs-Obs response: ${JSON.stringify(result, null, 2)}`);
-    return result;
+    return Object.values(resultMap);
 }
 
 module.exports = { loadSimVsObsFromOutFile };

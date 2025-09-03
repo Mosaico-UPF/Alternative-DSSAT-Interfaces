@@ -80,29 +80,24 @@ app.get('/api/out/:crop/:file', (request, response) => {
 app.get('/api/t/:crop/:file', async (request, response) => {
     let crop = request.params.crop;
     let tfile = request.params.file;
-
-    jdssatInstance = new jdssat();
-    jdssatInstance.initialize();
-
-    let fileContent = await jdssatInstance.readTFile(crop, tfile);
-    
-    // Transform T-file data to match OUT file structure
-    const transformedData = fileContent.map(entry => {
-        // Convert single values to arrays like OUT files
-        const values = entry.values.map(v => ({
-            cde: v.cde,
-            values: Array.isArray(v.values) ? v.values : [v.values]
-        }));
-        
-        return {
-            run: entry.runName || entry.run,
-            experiment: entry.experiment,
-            day: entry.day || 0, // Use provided day or default
-            values: values
-        };
-    });
-
-    response.json(transformedData);
+    try {
+        jdssatInstance = new jdssat();
+        jdssatInstance.initialize();
+        console.log(`Starting readTFile for ${crop}/${tfile}`);
+        let fileContent = await jdssatInstance.readTFile(crop, tfile).catch(err => {
+            console.error(`readTFile error for ${tfile}:`, err.message);
+            throw err;
+        });
+        console.log(`Completed readTFile for ${tfile}`);
+        if (!fileContent) {
+            console.error(`No data returned for T file: ${tfile}`);
+            return response.status(404).json({ error: `T file ${tfile} not found or empty` });
+        }
+        response.json(fileContent);
+    } catch (error) {
+        console.error(`Error processing T file ${tfile}:`, error);
+        response.status(500).json({ error: 'Failed to process T file', details: error.message });
+    }
 });
 
 app.get('/api/cde', (request, response) => {

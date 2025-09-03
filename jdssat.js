@@ -478,10 +478,21 @@ class jdssat {
   }
   
 readTFile(crop, file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+      const filePath = `${globalBasePath}${crop}/${file}`;
+      console.log(`Attempting to read T file: ${filePath}`);
       Tfiles.readTFile(crop, file, (data) => {
-          resolve(data);
+          console.log(`T file ${file} callback received:`, data ? 'data present' : 'no data');
+          if (data) {
+              resolve(data);
+          } else {
+              reject(new Error(`No data returned for ${file}`));
+          }
       });
+      // Set a 10-second timeout
+      setTimeout(() => {
+          reject(new Error(`Timeout reading T file ${file} after 10 seconds`));
+      }, 10000);
   });
 }
 }
