@@ -242,7 +242,7 @@ def plot_evaluate(figure, plot_data, legend_visible=True):
     _apply_legend(ax, figure, plot_data, legend_visible)
     figure.canvas.draw()
 
-def plot_scatter(figure, plot_data, legend_visible=True):
+def plot_scatter(figure, plot_data, legend_visible=True, sim_vs_meas=False):
     """Plot scatter data."""
     figure.clear()
     ax = figure.add_subplot(111)
@@ -250,10 +250,10 @@ def plot_scatter(figure, plot_data, legend_visible=True):
     key_to_color = _get_color_map(plot_data)
 
     for data in plot_data:
-        run = data.get("run", "Unknown")
-        var = data.get("variable", data["label"].split()[0])
-        color = key_to_color[(var, run)]
-        x_values, y_values, label = data["x"], data["y"], data["label"]
+        x_values = data['x']
+        y_values = data['y']
+        label = data['label']
+        color = key_to_color[(data.get('variable', data['label'].split()[0]), data.get('run', 'Unknown'))]
 
         valid_pairs = [(x, y) for x, y in zip(x_values, y_values) if x is not None and y is not None]
         if not valid_pairs:
@@ -262,9 +262,19 @@ def plot_scatter(figure, plot_data, legend_visible=True):
         valid_x, valid_y = zip(*valid_pairs)
         ax.scatter(valid_x, valid_y, label=label, color=color)
 
-    ax.set_xlabel('X-Axis Variable')
-    ax.set_ylabel('Y-Axis Variable')
-    ax.grid(True)
+    if sim_vs_meas:
+        ax.set_xlabel('Simulated')
+        ax.set_ylabel('Experimental')
+        all_x = [x for data in plot_data for x in data.get('x', []) if x is not None]
+        all_y = [y for data in plot_data for y in data.get('y', []) if y is not None]
+        if all_x and all_y:
+            min_val = min(min(all_x), min(all_y))
+            max_val = max(max(all_x), max(all_y))
+            ax.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1')
+    else:
+        ax.set_xlabel('X-Axis Variable')
+        ax.set_ylabel('Y-Axis Variable')
 
+    ax.grid(True)
     _apply_legend(ax, figure, plot_data, legend_visible)
     figure.canvas.draw()

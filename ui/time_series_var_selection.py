@@ -223,31 +223,34 @@ class TimeSeriesVarSelectionDialog(QDialog):
             checkbox.setChecked(state == Qt.Checked)
 
     def preview_file(self):
-        """Preview selected file content."""
-        selected_items = self.files_display.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "Warning", "Please select a file to preview.")
+        """Preview the content of the frst selected file in a dialog."""
+        if not self.selected_files:
+            QMessageBox.warning(self, "Warning!", "No files selected to preview.")
             return
-        file_name = selected_items[0].text()
-        file_path = next(f for f in self.selected_files if os.path.basename(f) == file_name)
+
+        # Read and display the content of the first selected file
+        file_path = self.selected_files[0]
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read(1000)  # Limit to first 1000 chars
+            with open(file_path, 'r', encoding='utf-8') as file:
+                file_content = file.read()
+
             preview_dialog = QDialog(self)
-            preview_dialog.setWindowTitle(f"Preview: {file_name}")
-            layout = QVBoxLayout()
-            text_edit = QTextEdit()
-            text_edit.setReadOnly(True)
-            text_edit.setText(content)
-            layout.addWidget(text_edit)
-            close_button = QPushButton("Close")
-            close_button.clicked.connect(preview_dialog.accept)
-            layout.addWidget(close_button)
-            preview_dialog.setLayout(layout)
+            preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
             preview_dialog.resize(600, 400)
+
+            text_edit = QTextEdit(preview_dialog)
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(file_content)
+
+            layout = QVBoxLayout()
+            layout.addWidget(text_edit)
+            preview_dialog.setLayout(layout)
+
+            center_window_on_parent(preview_dialog, self)
             preview_dialog.exec_()
+
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to preview file: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Could not preview the file:\n{str(e)}")
 
     def show_graph_tab(self):
         """Create and display the time series graph."""

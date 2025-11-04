@@ -123,21 +123,20 @@ class EvaluateVarSelectionDialog(QDialog):
         self.display_data()
 
     def preview_file(self):
-        """Preview the content of the first file selected in a dialog."""
+        """Preview the content of the frst selected file in a dialog."""
         if not self.selected_files:
             QMessageBox.warning(self, "Warning!", "No files selected to preview.")
             return
 
-        # Read and display content of the first file
+        # Read and display the content of the first selected file
         file_path = self.selected_files[0]
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_content = file.read()
 
-            # Create preview dialog
             preview_dialog = QDialog(self)
             preview_dialog.setWindowTitle(f"Preview of {os.path.basename(file_path)}")
-            preview_dialog.setGeometry(250, 250, 600, 400)
+            preview_dialog.resize(600, 400)
 
             text_edit = QTextEdit(preview_dialog)
             text_edit.setReadOnly(True)
@@ -147,6 +146,7 @@ class EvaluateVarSelectionDialog(QDialog):
             layout.addWidget(text_edit)
             preview_dialog.setLayout(layout)
 
+            center_window_on_parent(preview_dialog, self)
             preview_dialog.exec_()
 
         except Exception as e:

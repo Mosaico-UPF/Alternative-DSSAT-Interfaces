@@ -1,11 +1,13 @@
-# C:\Users\User\Documents\Projetos\interface_Gbuild_refatorada\export\export_functions.py
+from datetime import date, datetime, timedelta
 import pandas as pd
 from PyQt5.QtWidgets import QFileDialog
 from collections import defaultdict
 from xlsxwriter.utility import xl_col_to_name
 
+from utils.stats_calculator import calculate_statistics
+
 def export_data_to_txt_time_series(plot_data, parent):
-    """ Export time series data to a TXT file with simulated and measured data aligned in separate sections
+    """ Export time series data to a TXT file with simulated and measured data aligned in a single table
 
     Args: 
         plot_data (list): List of datasets containing labels, y-values, and data type (simulated/measured)
@@ -23,81 +25,52 @@ def export_data_to_txt_time_series(plot_data, parent):
     if not file_path:
         return
     
-    # Initialize dictionaries to store simulated and measured data
-    simulated_dict = defaultdict(list)
-    measured_dict = defaultdict(dict)
+    # Initialize dictionary to store all data (simulated and measured in one table)
+    data_dict = defaultdict(dict)
     max_len = 0
+    dates = []
 
-    # Separate data into simulated and measured dictionaries
+    # Collect all data and determine if dates are available
+    has_dates = any('x_calendar' in dataset for dataset in plot_data)
+    if has_dates:
+        dates = next(dataset['x_calendar'] for dataset in plot_data if 'x_calendar' in dataset)
+    else:
+        dates = list(range(1, max(len(dataset['y']) for dataset in plot_data) + 1))
+
     for dataset in plot_data:
         label = dataset.get('label', 'No label')
         y_vals = dataset.get('y', [])
         data_type = dataset.get('type', 'simulated')
-        if data_type == 'simulated':
-            simulated_dict[label] = y_vals
-            max_len = max(max_len, len(y_vals))
-        elif data_type == 'measured':
-            x_vals = dataset.get('x_calendar', [])
-            for x, y in zip(x_vals, y_vals):
-                measured_dict[x][f"{label} (Measured)"] = y
+        suffix = ' (measured)' if data_type == 'measured' else ''
+        for i, y in enumerate(y_vals):
+            data_dict[i][f"{label}{suffix}"] = y
+        max_len = max(max_len, len(y_vals))
 
-    # Build DataFrame for simulated data, indexed by day
-    df_sim = pd.DataFrame({'Day': range(1, max_len + 1)})
-    for label, y_vals in simulated_dict.items():
-        padded = y_vals + [None] * (max_len - len(y_vals))
-        df_sim[f"{label} (Simulated)"] = padded
+    # Build DataFrame
+    df = pd.DataFrame.from_dict(data_dict, orient='index')
+    df.sort_index(inplace=True)
+    df.insert(0, 'Date', dates[:max_len])
+    df.fillna('', inplace=True)
 
-    # Build DataFrame for measured data, indexed by date
-    df_meas = pd.DataFrame.from_dict(measured_dict, orient='index')
-    df_meas.index.name = 'Date'
-    df_meas.reset_index(inplace=True)
-    df_meas.sort_values(by='Date', inplace=True)
+    # Calculate column widths
+    col_widths = {col: max(len(str(col)), df[col].astype(str).map(len).max() + 2) for col in df.columns}
 
-    def write_aligned(df, file_obj, title):
-        """Write DataFrame to a file with aligned columns
-        
-        Args:
-            df (pd.DataFrame): DataFrame to write.
-            file_obj: File object to write to.
-            title (str): Section title for the output.
-        """
-        file_obj.write(f"=== {title} ===\n")
-        # Calculate width for each column
-        col_widths = {
-            col: max(len(str(col)), df[col].astype(str).map(len).max())
-            for col in df.columns
-        }
-
-        # Write header with aligned column names
-        header_line = "  ".join(str(col).ljust(col_widths[col]) for col in df.columns)
-        file_obj.write(header_line + "\n")
-
-        # Write data rows with aligned values 
-        for _, row in df.iterrows():
-            line = "  ".join(
-                str(row[col]).ljust(col_widths[col]) if pd.notna(row[col]) else " " * col_widths[col]
-                for col in df.columns
-            )
-            file_obj.write(line + "\n")
-
-    # Write both DataFrames to the TXT file
+    # Write to TXT with aligned columns using spaces
     with open(file_path, 'w', encoding='utf-8') as f:
-        write_aligned(df_sim, f, "Simulated Time Series")
-        f.write("\n")
-        write_aligned(df_meas, f, "Measured Data Points")
-
-
+        header = ' '.join(str(col).ljust(col_widths[col]) for col in df.columns)
+        f.write(header + '\n')
+        for _, row in df.iterrows():
+            line = ' '.join(str(row[col]).ljust(col_widths[col]) for col in df.columns)
+            f.write(line + '\n')
 
 def export_data_to_excel_time_series(plot_data, parent):
-    """Export time series data to an Excel file with simulated and measured data in 
-    separate sheets, inlcuding line chart.
+    """Export time series data to an Excel file with all data in one sheet and a chart.
 
     Args:
         plot_data (list): List of datasets containing labels, y-values, and data type
         (simulated/measured) 
         parent: Parent widget for the QFileDialog
     """
-
     # Open file save dialog for Excel file
     options = QFileDialog.Options()
     file_path, _ = QFileDialog.getSaveFileName(
@@ -110,455 +83,545 @@ def export_data_to_excel_time_series(plot_data, parent):
     if not file_path:
         return
 
-    # Initialize dictionaries to store simulated and measured data
-    simulated_dict = defaultdict(list)
-    measured_dict = defaultdict(dict)
+    # Initialize dictionary to store all data
+    data_dict = defaultdict(dict)
     max_len = 0
+    dates = []
 
-    # Separate data into simulated and measured dictionaries
+    # Collect dates if available
+    has_dates = any('x_calendar' in dataset for dataset in plot_data)
+    if has_dates:
+        dates = next(dataset['x_calendar'] for dataset in plot_data if 'x_calendar' in dataset)
+    else:
+        dates = list(range(1, max(len(dataset['y']) for dataset in plot_data) + 1))
+
     for dataset in plot_data:
         label = dataset.get('label', 'No label')
         y_vals = dataset.get('y', [])
         data_type = dataset.get('type', 'simulated')
-        if data_type == 'simulated':
-            simulated_dict[label] = y_vals
-            max_len = max(max_len, len(y_vals))
-        elif data_type == 'measured':
-            x_vals = dataset.get('x_calendar', [])
-            for x, y in zip(x_vals, y_vals):
-                measured_dict[x][f"{label} (Measured)"] = y
+        suffix = ' (measured)' if data_type == 'measured' else ''
+        for i, y in enumerate(y_vals):
+            data_dict[i][f"{label}{suffix}"] = y
+        max_len = max(max_len, len(y_vals))
 
-    # Create DataFrame for simulated data (indexed by Day)
-    df_sim = pd.DataFrame({'Day': range(1, max_len + 1)})
-    for label, y_vals in simulated_dict.items():
-        padded = y_vals + [None] * (max_len - len(y_vals))
-        df_sim[f"{label} (Simulated)"] = padded
+    # Build DataFrame
+    df = pd.DataFrame.from_dict(data_dict, orient='index')
+    df.sort_index(inplace=True)
+    df.insert(0, 'Date', dates[:max_len])
+    df.fillna('', inplace=True)
 
-    # Create DataFrame for measured data (indexed by Date)
-    df_meas = pd.DataFrame.from_dict(measured_dict, orient='index')
-    df_meas.index.name = 'Date'
-    df_meas.reset_index(inplace=True)
-    df_meas.sort_values(by='Date', inplace=True)
-
-    # Write Excel with formatting and chart
-    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+    # Write to Excel
+    with pd.ExcelWriter(file_path, engine='xlsxwriter', date_format='YYYY-MM-DD' if has_dates else None) as writer:
         workbook = writer.book
-        header_format = workbook.add_format({
-            'bold': True, 'bg_color': '#D3D3D3',
-            'border': 1, 'align': 'center'
-        })
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1, 'align': 'center'})
         cell_format = workbook.add_format({'border': 1})
 
-        # Write Simulated sheet
-        df_sim.to_excel(writer, sheet_name='Simulated', index=False, startrow=1)
-        ws_sim = writer.sheets['Simulated']
-        for col_num, col in enumerate(df_sim.columns):
-            ws_sim.write(0, col_num, col, header_format)
-        for row_num, row in df_sim.iterrows():
-            for col_num, val in enumerate(row):
-                ws_sim.write(row_num + 1, col_num, val if pd.notna(val) else '', cell_format)
+        df.to_excel(writer, sheet_name='Data', index=False, startrow=0)
 
-        # Write Measured data sheet
-        df_meas.to_excel(writer, sheet_name='Measured', index=False, startrow=1)
-        ws_meas = writer.sheets['Measured']
-        for col_num, col in enumerate(df_meas.columns):
-            ws_meas.write(0, col_num, col, header_format)
-        for row_num, row in df_meas.iterrows():
-            for col_num, val in enumerate(row):
-                ws_meas.write(row_num + 1, col_num, val if pd.notna(val) else '', cell_format)
-
-        # Create line chart for simulated data
-        chart_sheet = workbook.add_worksheet('Chart')
-        chart = workbook.add_chart({'type': 'line'})
-        added_series = False
-        for i, col in enumerate(df_sim.columns[1:], 1):  # Skip "Day"
-            col_letter = chr(65 + i)
-            if df_sim[col].count() < 2:
-                continue
-            chart.add_series({
-                'name':       col,
-                'categories': f"Simulated!$A$2:$A${len(df_sim)+1}",
-                'values':     f"Simulated!${col_letter}$2:${col_letter}${len(df_sim)+1}",
-                'line': {'width': 1.5}
-            })
-            added_series = True
-
-        if added_series:
-            chart.set_title({'name': 'Simulated Time Series'})
-            chart.set_x_axis({'name': 'Day'})
-            chart.set_y_axis({'name': 'Value'})
-            chart.set_legend({'position': 'top'})
-            chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
-        else:
-            chart_sheet.write('A1', 'No valid simulated series to display.')
-
-
-def export_data_to_txt_scatter(plot_data, parent):
-    """Export scatter plot data to a TXT file with aligned columns for X and Y values.
-    
-    Args:
-        plot_data (list): List of tuples containing (x_values, y_values, label).
-        parent: Parent widget for the QFileDialog.
-    """
-    # Open file save dialog for the TXT file
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Scatter Plot Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options)
-    if file_path:
-        # Create DataFrame with aligned data
-        max_len = max(len(x) for x, _, _ in plot_data)
-        df = pd.DataFrame({'Day': range(1, max_len + 1)})
-    
-        # Add X and Y values for each dataset
-        for x_values, y_values, label in plot_data:
-            # Fill missing values with None to ensure equal length
-            x_values = list(x_values) + [None] * (max_len - len(x_values))
-            y_values = list(y_values) + [None] * (max_len - len(y_values))
-            df[f'{label} X'] = x_values
-            df[f'{label} Y'] = y_values
-
-        # Align column widths
-        column_widths = {col: max(len(col), df[col].astype(str).map(len).max()) for col in df.columns}
-
-        # Write to TXT file with aligned columns
-        with open(file_path, 'w') as f:
-            header = '\t'.join(col.ljust(column_widths[col]) for col in df.columns)
-            f.write(header + '\n')
-            for _, row in df.iterrows():
-                line = '\t'.join(
-                    str(item).ljust(column_widths[col]) if item is not None else ' ' * column_widths[col]
-                    for col, item in zip(df.columns, row)
-                )
-                f.write(line + '\n')
-                
-def export_data_to_excel_scatter(plot_data, parent):
-    """Export scatter plot data to an Excel file with a combined scatter chart.
-    
-    Args:
-        plot_data (list): List of tuples containing (x_values, y_values, label).
-        parent: Parent Widget for QFileDialog.
-    """
-    # Import required for column letter conversion
-    from string import ascii_uppercase
-
-    # Open file save dialog for Excel file 
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(
-        parent,
-        "Save Scatter Plot Data & Graph to Excel",
-        "",
-        "Excel Files (*.xlsx);;All Files (*)",
-        options=options
-    )
-    if file_path:
-        # Write to Excel formatting chart 
-        with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-            workbook = writer.book
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#D3D3D3',
-                'border': 1,
-                'align': 'center'
-            })
-            cell_format = workbook.add_format({'border': 1})
-
-            # Get max data length
-            max_length = max(len(x_values) for x_values, _, _ in plot_data)
-
-            # Create data table
-            df = pd.DataFrame({'Index': range(1, max_length + 1)})
-            for x_values, y_values, label in plot_data:
-                x_series = pd.Series(x_values).reindex(range(max_length))
-                y_series = pd.Series(y_values).reindex(range(max_length))
-                df[f'{label} X'] = x_series
-                df[f'{label} Y'] = y_series
-
-            # Write to Excel
-            df.to_excel(writer, sheet_name='Data', startrow=1, index=False)
-
-            worksheet = writer.sheets['Data']
-
-            # Header formatting
-            for col_num, value in enumerate(df.columns):
-                worksheet.write(0, col_num, value, header_format)
-
-            # Cell formatting
-            for row_num, row in df.iterrows():
-                for col_num, value in enumerate(row):
-                    worksheet.write(row_num + 1, col_num, value if pd.notna(value) else '', cell_format)
-
-            # Column width auto-adjust
-            for col_num, col in enumerate(df.columns):
-                max_len = max(len(str(col)), df[col].astype(str).map(len).max())
-                worksheet.set_column(col_num, col_num, max_len + 2)
-
-            # Create single combined chart
-            chart_sheet = workbook.add_worksheet('Charts')
-            chart = workbook.add_chart({'type': 'scatter'})
-
-            for idx, (_, _, label) in enumerate(plot_data):
-                x_col_idx = 1 + 2 * idx  # X columns: 1, 3, 5...
-                y_col_idx = x_col_idx + 1
-
-                # Convert to Excel letters (supports >26 cols)
-                def col_letter(idx):
-                    letters = ''
-                    while idx >= 0:
-                        letters = chr(65 + (idx % 26)) + letters
-                        idx = idx // 26 - 1
-                    return letters
-
-                x_col_letter = col_letter(x_col_idx)
-                y_col_letter = col_letter(y_col_idx)
-
-                chart.add_series({
-                    'name': label,
-                    'categories': f"'Data'!${x_col_letter}$2:${x_col_letter}${max_length + 1}",
-                    'values': f"'Data'!${y_col_letter}$2:${y_col_letter}${max_length + 1}",
-                    'marker': {'type': 'circle', 'size': 6}
-                })
-
-            chart.set_title({'name': 'Scatter Plot - All Runs'})
-            chart.set_x_axis({'name': 'X Variable'})
-            chart.set_y_axis({'name': 'Y Variable'})
-            chart.set_legend({'position': 'top'})
-
-            chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
-
-def export_data_to_txt_evaluate(plot_data, parent):
-    """Export evaluation data (simulated vs measured) to a TXT file
-    
-    Args:
-        plot_data (list): List of datasets containing labels, x-values (simulated), and y-values (measured).
-        parent: Parent widget for the QFileDialog.
-        """
-    # Open file save dialog for TXT file
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Evaluate Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options)
-    if file_path:
-        # Write evaluation data TXT file
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write("Evaluate Data\n")
-            f.write("Index\tSimulated\tMeasured\tVariable\n")
-            for data in plot_data:
-                label = data.get('label', 'No label')
-                x_values = data.get('x', [])
-                y_values = data.get('y', [])
-                if not x_values or not y_values:
-                    continue
-                f.write(f"{label}\n")
-                f.write("Index\tSimulated\tMeasured\n")
-                for x, y in zip(x_values, y_values):
-                    f.write(f"{x}\t{x if x is not None else ''}\t{y if y is not None else ''}\n")
-                f.write("\n")
-
-def export_data_to_excel_evaluate(plot_data, parent):
-    """Export evaluation data to an Excel file with scatter chart comparing simulated vs measured data.
-    
-    Args:
-        plot_data (list): List of datasets containing labels, x-values (simulated), and y-values (measured).
-        parent: Parent widget for the QFileDialog
-    """
-    # Open file save dialog for Excel file
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Evaluate Data & Graph to Excel", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
-    if file_path:
-        # Write Excel file with formatting and chart
-        with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-            workbook = writer.book
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#D3D3D3',
-                'border': 1,
-                'align': 'center'
-            })
-            cell_format = workbook.add_format({'border': 1})
-
-            # Prepare data
-            max_length = max(len(data.get('x', [])) for data in plot_data) if plot_data else 0
-            if max_length == 0:
-                raise ValueError("No data to export.")
-
-            df = pd.DataFrame({'Index': range(1, max_length + 1)})
-            for data in plot_data:
-                label = data.get('label', 'No label')
-                x_vals = data.get('x', [None] * max_length)
-                y_vals = data.get('y', [None] * max_length)
-                df[f'{label} Simulated'] = x_vals
-                df[f'{label} Measured'] = y_vals
-
-            # Write DataFrame to Excel
-            df.to_excel(writer, sheet_name='Data', startrow=1, index=False)
-            worksheet = writer.sheets['Data']
-
-            # Headers
-            for col_num, value in enumerate(df.columns):
-                worksheet.write(0, col_num, value, header_format)
-
-            # Data
-            for row_num, row in df.iterrows():
-                for col_num, value in enumerate(row):
-                    worksheet.write(row_num + 1, col_num, value if pd.notna(value) else '', cell_format)
-
-            # Column widths
-            for col_num, col in enumerate(df.columns):
-                max_len = max(len(str(col)), df[col].astype(str).map(len).max())
-                worksheet.set_column(col_num, col_num, max_len + 2)
-
-            # Chart
-            chart_sheet = workbook.add_worksheet('Charts')
-            chart = workbook.add_chart({'type': 'scatter'})
-
-            for idx, data in enumerate(plot_data):
-                label = data.get('label', 'No label')
-                x_col_idx = 2 * idx + 1  # Simulated columns: 1, 3, 5...
-                y_col_idx = x_col_idx + 1  # Measured columns: 2, 4, 6...
-
-                def col_letter(idx):
-                    letters = ''
-                    while idx >= 0:
-                        letters = chr(65 + (idx % 26)) + letters
-                        idx = idx // 26 - 1
-                    return letters
-
-                x_col_letter = col_letter(x_col_idx)
-                y_col_letter = col_letter(y_col_idx)
-
-                chart.add_series({
-                    'name': label,
-                    'categories': f"'Data'!${x_col_letter}$2:${x_col_letter}${max_length + 1}",
-                    'values': f"'Data'!${y_col_letter}$2:${y_col_letter}${max_length + 1}",
-                    'marker': {'type': 'circle', 'size': 6}
-                })
-
-            chart.set_title({'name': 'Evaluate Data (Simulated vs Measured)'})
-            chart.set_x_axis({'name': 'Simulated'})
-            chart.set_y_axis({'name': 'Measured'})
-            chart.set_legend({'position': 'top'})
-            chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
-
-def export_tfile_to_txt(plot_data, parent, use_calendar_mode=True):
-    """Export T file data to a TXT file, using either calendar dates or DAP (days after planting).
-    
-    Args:
-        plot_data (list): List of datasets containing labels, x-values, and y-values.
-        parent: Parent widget for the QFileDialog
-        use_calendar_mode (bool): True to use calendar dates, False to use DAP.
-    """
-    # Open file save dialog for TXT file
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(parent, "Save T File Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options)
-    if not file_path:
-        return
-
-    # Determine x-axis key and label based on mode
-    x_key = 'x_calendar' if use_calendar_mode else 'x_dap'
-    x_label = 'Date' if use_calendar_mode else 'DAP'
-
-    # Build dictionary for DataFrame
-    data_dict = defaultdict(dict)
-    for dataset in plot_data:
-        label = dataset['label']
-        x_vals = dataset.get(x_key)
-        y_vals = dataset.get('y')
-        for x, y in zip(x_vals, y_vals):
-            data_dict[x][label] = y
-
-    # Create and sort DataFrame 
-    df = pd.DataFrame.from_dict(data_dict, orient='index')
-    df.index.name = x_label
-    df.sort_index(inplace=True)
-    df.reset_index(inplace=True)
-
-    # Calculate column widths for alignment 
-    column_widths = {col: max(len(str(col)), df[col].astype(str).map(len).max()) for col in df.columns}
-
-    # Write to TXT file with aligned columns 
-    with open(file_path, 'w') as f:
-        header = '\t'.join(col.ljust(column_widths[col]) for col in df.columns)
-        f.write(header + '\n')
-        for _, row in df.iterrows():
-            line = '\t'.join(str(row[col]).ljust(column_widths[col]) if pd.notnull(row[col]) else ' ' * column_widths[col] for col in df.columns)
-            f.write(line + '\n')
-
-
-def export_tfile_to_excel(plot_data, parent, use_calendar_mode=True):
-    """Export T file data to an Excel file with a line chart, using either calendar dates or DAP
-    
-    Args:
-        plot_data (list): List of datasets containing labels, x-values, and y-values.
-        parent: Parent widget for the QFileDialog.
-        use_calendar_mode (bool): True to use calendar dates, False to use DAP.
-        """
-    # Open save dialog for Excel file 
-    options = QFileDialog.Options()
-    file_path, _ = QFileDialog.getSaveFileName(parent, "Save T File Data to Excel", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
-    if not file_path:
-        return
-
-    # Determine x-axis key and label based on mode
-    x_key = 'x_calendar' if use_calendar_mode else 'x_dap'
-    x_label = 'Date' if use_calendar_mode else 'DAP'
-
-    # Build dictionary for DataFrame 
-    data_dict = defaultdict(dict)
-    for dataset in plot_data:
-        label = dataset['label']
-        x_vals = dataset.get(x_key)
-        y_vals = dataset.get('y')
-        for x, y in zip(x_vals, y_vals):
-            data_dict[x][label] = y
-
-    # Create and Sort DataFrame
-    df = pd.DataFrame.from_dict(data_dict, orient='index')
-    df.index.name = x_label
-    df.sort_index(inplace=True)
-    df.reset_index(inplace=True)
-
-    # Write to Excel with formatting and chart
-    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='Data', index=False, startrow=1)
-
-        workbook = writer.book
-        worksheet = writer.sheets['Data']
-
-        # Define formats
-        header_format = workbook.add_format({
-            'bold': True,
-            'bg_color': '#D3D3D3',
-            'border': 1,
-            'align': 'center'
-        })
-        cell_format = workbook.add_format({'border': 1})
-
-        # Write headers 
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(0, col_num, value, header_format)
-
-        # Write data
+        ws_data = writer.sheets['Data']
+        for col_num, col in enumerate(df.columns):
+            ws_data.write(0, col_num, col, header_format)
+            max_len = max(len(str(col)), df[col].astype(str).map(len).max())
+            ws_data.set_column(col_num, col_num, max_len + 2)
         for row_num, row in df.iterrows():
             for col_num, val in enumerate(row):
-                worksheet.write(row_num + 1, col_num, val if pd.notnull(val) else '', cell_format)
+                ws_data.write(row_num + 1, col_num, val if pd.notna(val) else '', cell_format)
 
-        # Auto-adjust column widths
-        for col_num, col in enumerate(df.columns):
-            max_length = max(len(str(col)), df[col].astype(str).map(len).max())
-            worksheet.set_column(col_num, col_num, max_length + 2)
-
-        # Create a line chart
+        # Chart sheet
         chart_sheet = workbook.add_worksheet('Charts')
         chart = workbook.add_chart({'type': 'line'})
-
         for i, col in enumerate(df.columns[1:], 1):
-            col_letter = chr(65 + i)
+            col_letter = xl_col_to_name(i)
             chart.add_series({
-                'name':       f'=Data!${col_letter}$1',
-                'categories': f'=Data!$A$2:$A${len(df)+1}',
-                'values':     f'=Data!${col_letter}$2:${col_letter}${len(df)+1}',
+                'name': col,
+                'categories': f"Data!$A$2:$A${len(df) + 1}",
+                'values': f"Data!${col_letter}$2:${col_letter}${len(df) + 1}",
                 'line': {'width': 1.5}
             })
-
-        chart.set_title({'name': 'T File Data'})
-        chart.set_x_axis({'name': x_label})
+        chart.set_title({'name': 'Time Series'})
+        chart.set_x_axis({'name': 'Date'})
         chart.set_y_axis({'name': 'Value'})
         chart.set_legend({'position': 'top'})
         chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
+
+def export_data_to_txt_scatter(parent):
+    """Export scatter plot data to a TXT file with aligned columns
+    
+    Args:
+        parent: GraphWindow instance containing plot_data, sim_vs_meas
+    """
+    plot_data = parent.plot_data
+    sim_vs_meas = parent.sim_vs_meas
+
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Scatter Plot Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options)
+    if not file_path:
+        return
+
+    df = pd.DataFrame()
+    max_len = max(max(len(d['x']), len(d['y'])) for d in plot_data)
+    df['Day'] = range(1, max_len + 1)
+
+    for dataset in plot_data:
+        label = dataset['label']
+        x_padded = dataset['x'] + [None] * (max_len - len(dataset['x']))
+        y_padded = dataset['y'] + [None] * (max_len - len(dataset['y']))
+
+        if sim_vs_meas:
+            df[f"{label} Simulated"] = x_padded
+            df[f"{label} Measured"] = y_padded
+        else:
+            parts = label.split(' vs ')
+            if len(parts) == 2:
+                x_cde = parts[0]
+                y_cde_run = parts[1]
+                y_cde = y_cde_run.split(' (')[0]
+                run = y_cde_run.split(' (')[1][:-1]
+                df[f"{x_cde} {run}"] = x_padded
+                df[f"{y_cde} {run}"] = y_padded
+
+    col_widths = {col: max(len(str(col)), df[col].astype(str).map(len).max() + 2) for col in df.columns if df[col].notna().any()}
+
+    with open(file_path, 'w') as f:
+        header = ' '.join(str(col).ljust(col_widths.get(col, 0)) for col in df.columns)
+        f.write(header + '\n')
+        for _, row in df.iterrows():
+            line = ' '.join(str(row[col]).ljust(col_widths.get(col, 0)) if pd.notna(row[col]) else ' ' * col_widths.get(col, 0) for col in df.columns)
+            f.write(line + '\n')
+
+def export_data_to_excel_scatter(parent):
+    """Export scatter plot data to an Excel file with chart
+    
+    Args:
+        parent: GraphWindow instance.
+    """
+    plot_data = parent.plot_data
+    sim_vs_meas = parent.sim_vs_meas
+
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Scatter Plot Data & Graph to Excel", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+    if not file_path:
+        return
+
+    df = pd.DataFrame()
+    max_len = max(max(len(d['x']), len(d['y'])) for d in plot_data)
+    df['Day'] = range(1, max_len + 1)
+
+    for dataset in plot_data:
+        label = dataset['label']
+        x_padded = dataset['x'] + [None] * (max_len - len(dataset['x']))
+        y_padded = dataset['y'] + [None] * (max_len - len(dataset['y']))
+
+        if sim_vs_meas:
+            df[f"{label} Simulated"] = x_padded
+            df[f"{label} Measured"] = y_padded
+        else:
+            parts = label.split(' vs ')
+            if len(parts) == 2:
+                x_cde = parts[0]
+                y_cde_run = parts[1]
+                y_cde = y_cde_run.split(' (')[0]
+                run = y_cde_run.split(' (')[1][:-1]
+                df[f"{x_cde} {run}"] = x_padded
+                df[f"{y_cde} {run}"] = y_padded
+
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1, 'align': 'center'})
+        cell_format = workbook.add_format({'border': 1})
+
+        df.to_excel(writer, sheet_name='Data', index=False, startrow=0)
+        ws_data = writer.sheets['Data']
+        for col_num, col in enumerate(df.columns):
+            ws_data.write(0, col_num, col, header_format)
+        for row_num, row in df.iterrows():
+            for col_num, val in enumerate(row):
+                ws_data.write(row_num + 1, col_num, val if pd.notna(val) else '', cell_format)
+        for col_num, col in enumerate(df.columns):
+            max_len_col = max(len(str(col)), df[col].astype(str).map(len).max())
+            ws_data.set_column(col_num, col_num, max_len_col + 2)
+
+        # Chart
+        chart_sheet = workbook.add_worksheet('Charts')
+        chart = workbook.add_chart({'type': 'scatter'})
+        col_indices = {col: idx for idx, col in enumerate(df.columns[1:])}
+        for dataset in plot_data:
+            label = dataset['label']
+            if sim_vs_meas:
+                x_col = f"{label} Simulated"
+                y_col = f"{label} Measured"
+            else:
+                parts = label.split(' vs ')
+                if len(parts) != 2:
+                    continue
+                x_cde = parts[0]
+                y_cde_run = parts[1]
+                y_cde = y_cde_run.split(' (')[0]
+                run = y_cde_run.split(' (')[1][:-1]
+                x_col = f"{x_cde} {run}"
+                y_col = f"{y_cde} {run}"
+            if x_col in col_indices and y_col in col_indices:
+                x_letter = xl_col_to_name(col_indices[x_col] + 1)
+                y_letter = xl_col_to_name(col_indices[y_col] + 1)
+                chart.add_series({
+                    'name': label,
+                    'categories': f"Data!${x_letter}$2:${x_letter}${max_len + 1}",
+                    'values': f"Data!${y_letter}$2:${y_letter}${max_len + 1}",
+                    'marker': {'type': 'circle', 'size': 6}
+                })
+        chart.set_title({'name': 'Scatter Plot'})
+        chart.set_x_axis({'name': 'X'})
+        chart.set_y_axis({'name': 'Y'})
+        chart.set_legend({'position': 'top'})
+        chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
+
+def export_data_to_txt_evaluate(parent):
+    """Export evaluation data to a TXT file (no index, headers repeated for obs/sim).
+    
+    Args:
+        parent: GraphWindow instance.
+    """
+    plot_data = parent.plot_data
+
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Evaluate Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options)
+    if not file_path:
+        return
+
+    vars_list = sorted(set(d['label'] for d in plot_data))
+    if not vars_list:
+        return
+
+    obs_dict = {}
+    sim_dict = {}
+    n_rows = 0
+    for d in plot_data:
+        label = d['label']
+        obs_dict[label] = d['y']
+        sim_dict[label] = d['x']
+        n_rows = max(n_rows, len(d['y']))
+
+    col_widths = {v: max(len(v), max(len(str(val)) for val in obs_dict.get(v, []) + sim_dict.get(v, [])) + 2) for v in vars_list}
+
+    with open(file_path, 'w') as f:
+        f.write(f"File(s): {parent.filename}\n\n")
+        header = ' '.join(v.ljust(col_widths[v]) for v in vars_list) + ' ' + ' '.join(v.ljust(col_widths[v]) for v in vars_list)
+        f.write(header + '\n')
+        for i in range(n_rows):
+            obs_line = [obs_dict.get(v, [])[i] if i < len(obs_dict.get(v, [])) else '' for v in vars_list]
+            sim_line = [sim_dict.get(v, [])[i] if i < len(sim_dict.get(v, [])) else '' for v in vars_list]
+            line_parts = obs_line + sim_line
+            line = ' '.join(str(val).ljust(col_widths[vars_list[j % len(vars_list)]]) for j, val in enumerate(line_parts))
+            f.write(line + '\n')
+
+def export_data_to_excel_evaluate(parent):
+    """Export evaluation data to an Excel file with data, chart, and statistic sheet
+    
+    Args:
+        parent: GraphWindow instance.
+    """
+    plot_data = parent.plot_data
+    data = parent.data
+
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(parent, "Save Evaluate Data & Graph to Excel", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+    if not file_path:
+        return
+
+    vars_list = sorted(set(d['label'] for d in plot_data))
+    if not vars_list:
+        return
+
+    obs_dict = {}
+    sim_dict = {}
+    n_rows = 0
+    for d in plot_data:
+        label = d['label']
+        obs_dict[label] = d['y']
+        sim_dict[label] = d['x']
+        n_rows = max(n_rows, len(d['y']))
+
+    # Data DF with repeated column names
+    columns = [''] + vars_list + vars_list
+    data_df = pd.DataFrame(columns=columns, index=range(n_rows))
+    col_idx = 1
+    for v in vars_list:
+        data_df.iloc[:, col_idx] = [obs_dict.get(v, [])[i] if i < len(obs_dict.get(v, [])) else None for i in range(n_rows)]
+        col_idx += 1
+    for v in vars_list:
+        data_df.iloc[:, col_idx] = [sim_dict.get(v, [])[i] if i < len(sim_dict.get(v, [])) else None for i in range(n_rows)]
+        col_idx += 1
+
+    # Statistic DF
+    stats_df = pd.DataFrame(columns=[
+        'Variable Name', 'Observed', 'Simulated', 'Ratio', 'Observed', 'Simulated',
+        'r-Square', 'Mean Diff.', 'Mean Abs.Diff.', 'RMSE', 'd-Stat.', 'Used Obs.', 'Total Number Obs.'
+    ])
+    for v in vars_list:
+        observed = obs_dict.get(v, [])
+        simulated = sim_dict.get(v, [])
+        stats = calculate_statistics(observed, simulated)
+        if stats:
+            row = [
+                v,
+                stats.get('mean_observed'),
+                stats.get('mean_simulated'),
+                stats.get('mean_ratio'),
+                stats.get('std_observed'),
+                stats.get('std_simulated'),
+                stats.get('r_squared'),
+                stats.get('mean_diff'),
+                stats.get('mean_abs_diff'),
+                stats.get('rmse'),
+                stats.get('d_stat'),
+                stats.get('used_obs'),
+                stats.get('total_obs')
+            ]
+            stats_df.loc[len(stats_df)] = row
+
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1, 'align': 'center'})
+        cell_format = workbook.add_format({'border': 1})
+
+        # Data sheet
+        data_df.to_excel(writer, sheet_name='Data', index=False, startrow=0, header=False)
+        ws_data = writer.sheets['Data']
+        # Write headers (repeated)
+        for col_num, value in enumerate(columns):
+            ws_data.write(0, col_num, value, header_format)
+        for row_num in range(n_rows):
+            for col_num in range(len(columns)):
+                val = data_df.iloc[row_num, col_num]
+                ws_data.write(row_num + 1, col_num, val if pd.notna(val) else '', cell_format)
+        for col_num in range(len(columns)):
+            max_len_col = max(len(str(columns[col_num])), data_df.iloc[:, col_num].astype(str).map(len).max())
+            ws_data.set_column(col_num, col_num, max_len_col + 2)
+
+        # Statistic sheet
+        stats_df.to_excel(writer, sheet_name='Statistic', index=False, startrow=1)
+        ws_stat = writer.sheets['Statistic']
+        ws_stat.write(0, 0, '', header_format)  # Blank
+        ws_stat.write(0, 1, 'Mean', header_format)
+        ws_stat.write(0, 2, '', header_format)
+        ws_stat.write(0, 3, '', header_format)
+        ws_stat.write(0, 4, 'Std.Dev.', header_format)
+        ws_stat.write(0, 5, '', header_format)
+        ws_stat.write(0, 6, '', header_format)
+        ws_stat.write(0, 7, '', header_format)
+        ws_stat.write(0, 8, '', header_format)
+        ws_stat.write(0, 9, '', header_format)
+        ws_stat.write(0, 10, '', header_format)
+        ws_stat.write(0, 11, '', header_format)
+        ws_stat.write(0, 12, '', header_format)
+        for col_num, col in enumerate(stats_df.columns):
+            ws_stat.write(1, col_num, col, header_format)
+        for row_num, row in stats_df.iterrows():
+            for col_num, val in enumerate(row):
+                ws_stat.write(row_num + 2, col_num, val if pd.notna(val) else '', cell_format)
+
+        
+        chart_sheet = workbook.add_worksheet('Plot')
+        chart = workbook.add_chart({'type': 'scatter'})
+        num_vars = len(vars_list)
+        for idx, v in enumerate(vars_list):
+            x_col_idx = 1 + idx  # obs columns start at 1
+            y_col_idx = 1 + num_vars + idx  # sim after obs
+            x_letter = xl_col_to_name(x_col_idx)
+            y_letter = xl_col_to_name(y_col_idx)
+            chart.add_series({
+                'name': v,
+                'categories': f"Data!${x_letter}$2:${x_letter}${n_rows + 1}",
+                'values': f"Data!${y_letter}$2:${y_letter}${n_rows + 1}",
+                'marker': {'type': 'circle', 'size': 6}
+            })
+        chart.set_title({'name': 'Evaluate Data (Simulated vs Measured)'})
+        chart.set_x_axis({'name': 'Observed'})
+        chart.set_y_axis({'name': 'Simulated'})
+        chart.set_legend({'position': 'top'})
+        chart_sheet.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})
+
+def export_tfile_to_txt(plot_data, parent, use_calendar_mode=True):
+ 
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(
+        parent, "Save T File Data to TXT", "", "Text Files (*.txt);;All Files (*)", options=options
+    )
+    if not file_path:
+        return
+
+    x_key   = 'x_calendar' if use_calendar_mode else 'x_dap'
+    x_label = 'Date' if use_calendar_mode else 'DAP'
+
+    all_x = set()
+    for ds in plot_data:
+        all_x.update(ds.get(x_key, []))
+    all_x = sorted(all_x)
+
+    if use_calendar_mode and all_x:
+        min_date = min(all_x)
+        max_date = max(all_x)
+        cur = min_date
+        full = []
+        while cur <= max_date:
+            full.append(cur)
+            cur += timedelta(days=1)
+        all_x = full
+
+    table = {}
+    for ds in plot_data:
+        label = ds.get('label', '???')
+        xs    = ds.get(x_key, [])
+        ys    = ds.get('y', [])
+        for x, y in zip(xs, ys):
+            if x not in table:
+                table[x] = {}
+            table[x][label] = y
+
+    col_order = [ds.get('label', '???') for ds in plot_data]
+
+    # Calculate widths dynamically for all columns, including x_label
+    date_strs = []
+    for x in all_x:
+        if use_calendar_mode:
+            # Assume x is datetime.date or datetime.datetime; strip time if present
+            if hasattr(x, 'date'):
+                x = x.date()
+            date_strs.append(x.strftime('%m/%d/%Y'))
+        else:
+            date_strs.append(str(x))
+
+    date_width = max(len(x_label), max((len(s) for s in date_strs), default=0)) + 2
+
+    widths = {lbl: len(lbl) + 2 for lbl in col_order}
+    for row in table.values():
+        for lbl, val in row.items():
+            widths[lbl] = max(widths[lbl], len(str(val)) + 2)
+
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(f"File(s): {parent.filename}\n\n")
+
+        header = x_label.ljust(date_width)
+        for lbl in col_order:
+            header += lbl.ljust(widths[lbl])
+        f.write(header.rstrip() + "\n")
+
+        for x, date_str in zip(all_x, date_strs):
+            line = date_str.ljust(date_width)
+            for lbl in col_order:
+                val = table.get(x, {}).get(lbl, '')
+                line += str(val).ljust(widths[lbl])
+            f.write(line.rstrip() + "\n")
+
+
+def export_tfile_to_excel(plot_data, parent, use_calendar_mode=True):
+    """
+    Export a *.T* file to Excel with data and plot
+    """
+    options = QFileDialog.Options()
+    file_path, _ = QFileDialog.getSaveFileName(
+        parent, "Save T File Data to Excel", "", "Excel Files (*.xlsx);;All Files (*)", options=options
+    )
+    if not file_path:
+        return
+
+    x_key   = 'x_calendar' if use_calendar_mode else 'x_dap'
+    x_label = 'Date' if use_calendar_mode else 'DAP'
+
+    all_x = set()
+    for ds in plot_data:
+        all_x.update(ds.get(x_key, []))
+    all_x = sorted(all_x)
+
+    # Detect if x values are Excel serial dates (integers/floats) or already datetime
+    is_serial = all_x and isinstance(all_x[0], (int, float))
+
+    def serial_to_dt(serial):
+        return datetime(1899, 12, 30) + timedelta(days=int(serial))
+
+    # Convert all_x to datetime if serial
+    if use_calendar_mode and is_serial:
+        all_x = [serial_to_dt(x) for x in all_x]
+
+    # Build table with converted keys if necessary
+    table = {}
+    for ds in plot_data:
+        lbl = ds.get('label', '???')
+        xs = ds.get(x_key, [])
+        if use_calendar_mode and is_serial:
+            xs = [serial_to_dt(x) for x in xs]
+        ys = ds.get('y', [])
+        for x, y in zip(xs, ys):
+            table.setdefault(x, {})[lbl] = y
+
+    col_order = [ds.get('label', '???') for ds in plot_data]
+
+    rows = []
+    for x in all_x:
+        row = {x_label: x}
+        for lbl in col_order:
+            row[lbl] = table.get(x, {}).get(lbl, None)
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    date_fmt = 'm/d/yyyy' if use_calendar_mode else None
+    with pd.ExcelWriter(file_path, engine='xlsxwriter',
+                        date_format=date_fmt) as writer:
+
+        df.to_excel(writer, sheet_name='Data', index=False, startrow=0)
+
+        workbook  = writer.book
+        ws_data   = writer.sheets['Data']
+
+        header_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#D3D3D3',
+            'border': 1, 'align': 'center'
+        })
+        cell_fmt = workbook.add_format({'border': 1})
+        
+        date_cell_fmt = workbook.add_format({'border': 1, 'num_format': 'mm/dd/yyyy'})
+
+        for c, col in enumerate(df.columns):
+            ws_data.write(0, c, col, header_fmt)
+
+        for r, row in enumerate(df.itertuples(index=False), start=1):
+            for c, val in enumerate(row):
+                if c == 0 and use_calendar_mode and val is not None:
+                    if isinstance(val, (date, datetime)):
+                        dt_val = val if isinstance(val, datetime) else datetime(val.year, val.month, val.day)
+                        ws_data.write_datetime(r, c, dt_val, date_cell_fmt)
+                    else:
+                        ws_data.write(r, c, val if pd.notnull(val) else '', cell_fmt)
+                else:
+                    ws_data.write(r, c, val if pd.notnull(val) else '', cell_fmt)
+
+        for c, col in enumerate(df.columns):
+            try:
+                max_len = max(len(str(col)), df[col].astype(str).map(len).max())
+            except Exception:
+                max_len = len(str(col))
+            ws_data.set_column(c, c, max_len + 2)
+
+        chart_ws = workbook.add_worksheet('Plot')
+        chart    = workbook.add_chart({'type': 'line'})
+
+        for i, lbl in enumerate(col_order, start=1):     
+            col_letter = xl_col_to_name(i)                
+            chart.add_series({
+                'name':       f"=Data!${col_letter}$1",
+                'categories': f"=Data!$A$2:$A${len(df)+1}",
+                'values':     f"=Data!${col_letter}$2:${col_letter}${len(df)+1}",
+                'line':       {'width': 1.5}
+            })
+
+        chart.set_title({'name': 'T File Data'})
+        chart.set_x_axis({
+            'name': x_label,
+            'date_axis': use_calendar_mode,
+            'num_format': 'mm/dd/yyyy' if use_calendar_mode else '0',
+            'label_position': 'low'
+        })
+        chart.set_y_axis({'name': 'Value'})
+        chart.set_legend({'position': 'top'})
+        chart_ws.insert_chart('B2', chart, {'x_scale': 2, 'y_scale': 1.5})

@@ -1,49 +1,39 @@
-import os
 import re
 
 def parse_data_cde(path="C:/DSSAT48/DATA.CDE"):
     """
-    Parses the DSSAT DATA.CDE file and returns a dictionary mapping variable acronyms to full descriptions.
-
-    Args:
-        path (str): Full path to the DATA.CDE file. Defaults to DSSAT48's standard location.
-
-    Returns:
-        dict: A dictionary where keys are acronyms and values are full variable descriptions including units.
-
-    Raises:
-        FileNotFoundError: If the DATA.CDE file is not found at the specified path.
+    Robust parser for DSSAT DATA.CDE files.
+    Returns {acronym: "Full variable name (units)"}.
     """
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"DATA.CDE not found at: {path}")
-
     variable_map = {}
+    pattern = re.compile(r"^([A-Z0-9#]+)\s+(.+?)\s{2,}(.+?)(?:\s{2,}|$)")
 
-    with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-        for line in file:
-            line = line.strip()
-            # Skip comments, empty lines, or header lines
-            if not line or line.startswith('*') or line.startswith('@'):
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith(("*", "@")):
                 continue
 
-            # Match lines with CDE, LABEL, DESCRIPTION, and optional SYNONYMS
-            # Ensure DESCRIPTION starts after a clear space boundary
-            match = re.match(r'^([A-Z0-9]{2,8})\s{1,}(.+?)\s{2,}(.+?)(?=\s{2,}\.|$)', line)
+            # Normalize whitespace
+            line = re.sub(r"\s+", " ", line)
+
+            # Try main regex first
+            match = pattern.match(raw_line)
             if match:
                 acronym = match.group(1).strip()
                 label = match.group(2).strip()
-                description = match.group(3).strip()
-                # Additional check to avoid LABEL spillover
-                if description.startswith(label):
-                    description = description[len(label):].strip()
-                    if not description or description == '.':
-                        description = label
-                        #print(f"Warning: DESCRIPTION starts with LABEL for {acronym}, using LABEL: {label}")
-                elif not description or description == '.':
-                    description = label
-                    #print(f"Warning: Empty or invalid DESCRIPTION for {acronym}, using LABEL: {label}")
-                variable_map[acronym] = description
+                desc = match.group(3).strip(" .")
             else:
-                print(f"Warning: Could not parse line: {line}")
+                # Fallback: split by double or triple spaces
+                parts = re.split(r"\s{2,}", raw_line.strip())
+                acronym = parts[0].strip() if len(parts) > 0 else None
+                label = parts[1].strip() if len(parts) > 1 else acronym
+                desc = parts[2].strip(" .") if len(parts) > 2 else label
+
+            # Sanity check
+            if acronym:
+                # Combine label and acronym if DSSAT GBuild style is desired
+                display_name = f"{label} ({acronym})" if acronym not in label else label
+                variable_map[acronym] = display_name
 
     return variable_map
