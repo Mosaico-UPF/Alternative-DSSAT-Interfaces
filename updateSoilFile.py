@@ -1,6 +1,7 @@
 from pathlib import Path
 from readSoilFile import show_profiles
 from DSSATTools.soil import SoilProfile
+from DSSATTools.soil import SoilLayer
 
 def update_soil_file(file_path: str | Path, profile_id: str, updates: dict) -> None:
     """
@@ -18,16 +19,14 @@ def update_soil_file(file_path: str | Path, profile_id: str, updates: dict) -> N
 
     # Aplica as atualizações
     for key, value in updates.items():
+        if key == "layers":
+            soil_profile.table = [SoilLayer(**lay) for lay in value]
+            continue  # já tratou, pula p/ próximo
+
         if key in soil_profile:
             soil_profile[key] = value
         else:
-            updated = False
-            for layer in soil_profile.table:
-                if key in layer:
-                    layer[key] = value
-                    updated = True
-            if not updated:
-                print(f"Aviso: O campo '{key}' não existe no perfil de solo e será ignorado.")
+            print(f"Aviso: campo «{key}» ignorado – não existe no cabeçalho.")
 
     # Reconstrói o arquivo:
     # 1. Extrai o cabeçalho antes do primeiro perfil
@@ -38,15 +37,19 @@ def update_soil_file(file_path: str | Path, profile_id: str, updates: dict) -> N
     # 2. Para cada perfil: se for o que foi editado, gera bloco novo; senão, reutiliza conteúdo
     blocks: list[str] = []
     for p in profiles:
-        if p["code"] == profile_id:
-            # soil_profile._write_sol() inclui cabeçalho; removemos as duas primeiras linhas
+        if p["code"] == profile_id:             # perfil editado
             new_block = soil_profile._write_sol().splitlines()[2:]
-            blocks.append("\n".join(new_block))
-        else:
-            blocks.append(p["content"])
+            blocks.append("\n".join(new_block))  # já começa com '*'
+        else:                                   # perfis não editados
+            blk = p["content"].lstrip()         # veio sem espaços extras
+            if not blk.startswith("*"):         # devolve o '*'
+                blk = "*" + blk
+            blocks.append(blk)
 
     # 3. Une tudo e salva
-    full_content = header + "\n".join(blocks)
+    full_content = header + "\n\n".join(
+        blk.rstrip("\n") for blk in blocks
+    ) + "\n"          # garante newline final
     file_path.write_text(full_content, encoding="utf-8")
     print(f"Perfil de solo '{profile_id}' atualizado com sucesso em {file_path}.")
 

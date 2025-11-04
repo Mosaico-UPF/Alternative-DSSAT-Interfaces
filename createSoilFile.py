@@ -31,7 +31,7 @@ def build_soil_file(
 ) -> None:
 
     if len(profile_id) != 10:
-        raise ValueError("profile_id deve ter exatamente 10 caracteres.")
+        raise ValueError("profile_id must be exactly 10 characters long.")
 
     table = [make_layer(**lay) for lay in layers]
 
@@ -51,7 +51,7 @@ def build_soil_file(
 
     dest = Path(dest)
     dest.write_text(profile._write_sol(), encoding="utf-8")
-    print(f"✔ Perfil «{profile_id}» salvo em {dest.resolve()}")
+    print(f"✔ Profile «{profile_id}» saved in {dest.resolve()}")
 
 # ----------------------------------------------------------------------
 if __name__ == "__main__":

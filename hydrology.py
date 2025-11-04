@@ -3,46 +3,45 @@
 Conversão entre % Slope × Curve Number (CN₂) tal como o utilitário
 DSSAT **SBuild** faz internamente.
 
-Declives-padrão por coluna:   1 % | 3 % | 8 % | 15 %
+Declives-padrão por coluna (da esquerda para a direita na grade):
 
-* :func:`slope_from_cn` devolve **sempre 1, 3, 8 ou 15** (sem interpolar).
+    1 % | 3 % | 8 % | 12 %
+
+* :func:`slope_from_cn` devolve **sempre 1, 3, 8 ou 12** (sem interpolar).
 * :func:`cn_from_slope` devolve o CN do limite superior da coluna em que
-  o declive cai. É o valor que o SBuild gravaria se escolhesse
+  o declive cai — é o valor que o SBuild gravaria se você escolhesse
   esse declive na interface.
 """
 
 from __future__ import annotations
-
 from typing import Mapping, Sequence
 
 # Limites de CN por grupo hidrológico (linhas) e por coluna (0-1-2-3)
 HYDRO_TABLE: Mapping[str, tuple[int, int, int, int]] = {
-    "Lowest":          (61, 73, 81, 84),   # Grupo A
-    "Moderately Low":  (64, 76, 84, 87),   # Grupo B
-    "Moderately High": (68, 80, 88, 91),   # Grupo C
-    "Highest":         (71, 83, 91, 94),   # Grupo D
+    "Lowest":           (63,   65,   73,   84),   # Grupo A
+    "Moderately Low":   (68,   76,   84,   87),   # Grupo B
+    "Moderately High":  (72, 85, 92, 96),   # Grupo C
+    "Highest":          (75,   83,   91,   94),   # Grupo D
 }
 
 # Declives-representantes que o SBuild mostra em cada coluna
-SLOPE_VALUES: Sequence[int] = (12, 8, 3, 1)        # ← 15 %, não 12 %
+SLOPE_VALUES: Sequence[int] = (1, 3, 8, 12)
 
 # ----------------------------------------------------------------------
 
 def slope_from_cn(group: str, cn: int | float | str) -> int | None:
-    """Converte *CN₂* em % Slope (1 / 3 / 8 / 15)."""
     row = HYDRO_TABLE.get(group)
     if row is None:
         return None
-
     try:
         cn_val = float(cn)
     except (TypeError, ValueError):
         return None
 
-    for slope, cn_lim in zip(SLOPE_VALUES, row):
-        if cn_val <= cn_lim:
-            return slope
-    return SLOPE_VALUES[-1]          # > último limite  → 15 %
+    if   cn_val <= row[0]: return 1    # 1 %
+    elif cn_val <= row[1]: return 3    # 3 %
+    elif cn_val <= row[2]: return 8    # 8 %
+    else:                  return 12   # 12 %
 
 # ----------------------------------------------------------------------
 

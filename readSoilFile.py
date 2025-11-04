@@ -13,6 +13,7 @@ from DSSATTools.soil import SoilProfile
 
 # ----------------------------------------------------------------------
 MISSING = {None, "nan", "NaN"}
+ID_RE = re.compile(r"^[A-Za-z0-9]{10}$")        # códigos-ID válidos (10 chars)
 
 
 def sane(v):
@@ -33,19 +34,36 @@ def get_content_by_profile_id(sol_path: Path | str, code: str) -> str:
             return blk
     raise ValueError(f"Perfil {code} não encontrado")
 
-
 def show_profiles(sol_path: Path | str) -> list[dict]:
-    """Lista códigos existentes no .SOL (para mostrar ao usuário)."""
+    """Lista somente os perfis válidos existentes no .SOL."""
     sol_path = Path(sol_path)
-    content = sol_path.read_text(encoding="utf-8")
-    out = []
-    for blk in re.split(r"\*+", content):
-        hdr = blk.strip().splitlines()
-        if hdr:
-            code = hdr[0].split()[0]
-            out.append({"code": code, "content": blk})
-    return out
+    content  = sol_path.read_text(encoding="utf-8")
 
+    out: list[dict] = []
+    for blk in re.split(r"\*+", content):
+        first = blk.strip().splitlines()
+        if not first:
+            continue
+
+        # 1.ª linha do bloco (sem o * inicial)
+        hdr  = first[0].lstrip("*").rstrip()
+        cols = hdr.split()
+
+        code = cols[0].strip()
+        if not ID_RE.match(code):
+            continue
+
+        # nome da série (a partir da 5.ª coluna)
+        if cols[4].upper() == "DEFAULT":
+            series_name = " ".join(cols[6:]).lstrip("-").strip()
+        else:
+            series_name = " ".join(cols[4:]).lstrip("-").strip()
+
+        label = f"{series_name} ({code})" if series_name else code
+        out.append({"code": code,
+                    "label": label,
+                    "content": blk})
+    return out
 
 NUM_RE = re.compile(r"-?\d+(?:\.\d+)?$")      # inteiro ou decimal opcional ±
 
@@ -75,8 +93,18 @@ def read_profile(path: str | Path, code: str) -> dict:
     # ── cabeçalho simples --------------------------------------------
     drainage = sane(g("sldr"))
     runoff   = sane(g("slro"))
-    scom     = g("scom")
-    color_code = "BN" if str(scom).strip() in {"", "-99", "nan", "NaN"} else str(scom).strip()
+    scom = g("scom")
+    if str(scom).strip() in {"", "-99", "nan", "NaN"}:
+        first = (g("soil_series_name") or "").strip().upper()[:1]
+        color_code = {
+            "B": "BL",
+            "N": "R",
+            "G": "G",
+            "Y": "Y",
+            "R": "R",
+        }.get(first, "BN")
+    else:
+        color_code = str(scom).strip()
 
     # ── utilitário: garante sempre list[str] -------------------------
     def as_list(x):
@@ -85,32 +113,31 @@ def read_profile(path: str | Path, code: str) -> dict:
         return [x]
 
     # listas “normais” ------------------------------------------------
-    slb  = as_list(g("slb"))     # depth (cm)
-    slmh = as_list(g("slmh"))    # master horizon
-    slcl = as_list(g("slcl"))    # clay  %
-    slsi = as_list(g("slsi"))    # silt  %
-    slcf = as_list(g("slcf"))    # stones %
-    sloc = as_list(g("sloc"))    # organic carbon %
-    slhw = as_list(g("slhw"))    # pH
-    scec = as_list(g("scec"))    # CEC
-    slni = as_list(g("slni"))    # total N %
+    slb  = as_list(g("slb"))
+    slmh = as_list(g("slmh"))
+    slcl = as_list(g("slcl"))
+    slsi = as_list(g("slsi"))
+    slcf = as_list(g("slcf"))
+    sloc = as_list(g("sloc"))
+    slhw = as_list(g("slhw"))
+    scec = as_list(g("scec"))
+    slni = as_list(g("slni"))
 
     # *novas* listas para a grade de cálculo --------------------------
-    slll = as_list(g("slll"))    # lower limit (θLL)
-    sdul = as_list(g("sdul"))    # drained upper limit (θDUL)
-    ssat = as_list(g("ssat"))    # saturated water content (θSAT)
-    sbdm = as_list(g("sbdm"))    # bulk density (g cm-3)
-    sskh = as_list(g("ssks"))    # Ksat (cm h-1)   — algumas bases usam SSKS
-    srgf = as_list(g("srgf"))    # root growth factor (0-1)
+    slll = as_list(g("slll"))
+    sdul = as_list(g("sdul"))
+    ssat = as_list(g("ssat"))
+    sbdm = as_list(g("sbdm"))
+    sskh = as_list(g("ssks"))
+    srgf = as_list(g("srgf"))
 
     # ── fallback: parse direto da tabela se algo estiver faltando ----
     if not slb or not slll or not ssat:
         header = {}
         rows   = []
         for ln in blk:
-            if ln.upper().startswith("@  SLB"):              # cabeçalho
-                header = {tok.upper(): i
-                          for i, tok in enumerate(ln.replace("@", "").split())}
+            if ln.upper().startswith("@  SLB"):
+                header = {tok.upper(): i for i, tok in enumerate(ln.replace("@", "").split())}
                 continue
             if header and (ln.startswith("@") or ln.startswith("*") or not ln.strip()):
                 break
@@ -119,8 +146,7 @@ def read_profile(path: str | Path, code: str) -> dict:
 
         def col(tok):
             idx = header.get(tok)
-            return [row[idx] if idx is not None and idx < len(row) else ""
-                    for row in rows]
+            return [row[idx] if idx is not None and idx < len(row) else "" for row in rows]
 
         if not slb:  slb = col("SLB")
         if not slmh: slmh = col("SLMH")
@@ -144,23 +170,21 @@ def read_profile(path: str | Path, code: str) -> dict:
     n = len(slb)
     for i in range(n):
         layers.append({
-            "depth": sane(slb[i]),
+            "depth":  sane(slb[i]),
             "texture": sane(slmh[i]) if i < len(slmh) else "",
-            "clay":  sane(slcl[i]) if i < len(slcl) else "-99",
-            "silt":  sane(slsi[i]) if i < len(slsi) else "-99",
-            "stones": sane(slcf[i]) if i < len(slcf) else "-99",
-            "oc":    sane(sloc[i]) if i < len(sloc) else "-99",
-            "ph":    sane(slhw[i]) if i < len(slhw) else "-99",
-            "cec":   sane(scec[i]) if i < len(scec) else "-99",
-            "tn":    sane(slni[i]) if i < len(slni) else "-99",
-
-            # campos para a aba “Calculate/Edit”
-            "lll":   sane(slll[i]) if i < len(slll) else "",
-            "dul":   sane(sdul[i]) if i < len(sdul) else "",
-            "sat":   sane(ssat[i]) if i < len(ssat) else "",
-            "bd":    sane(sbdm[i]) if i < len(sbdm) else "",
-            "ksat":  sane(sskh[i]) if i < len(sskh) else "",
-            "srgf":  sane(srgf[i]) if i < len(srgf) else "",
+            "clay":    sane(slcl[i]) if i < len(slcl) else "-99",
+            "silt":    sane(slsi[i]) if i < len(slsi) else "-99",
+            "stones":  sane(slcf[i]) if i < len(slcf) else "-99",
+            "oc":      sane(sloc[i]) if i < len(sloc) else "-99",
+            "ph":      sane(slhw[i]) if i < len(slhw) else "-99",
+            "cec":     sane(scec[i]) if i < len(scec) else "-99",
+            "tn":      sane(slni[i]) if i < len(slni) else "-99",
+            "lll":     sane(slll[i]) if i < len(slll) else "",
+            "dul":     sane(sdul[i]) if i < len(sdul) else "",
+            "sat":     sane(ssat[i]) if i < len(ssat) else "",
+            "bd":      sane(sbdm[i]) if i < len(sbdm) else "",
+            "ksat":    sane(sskh[i]) if i < len(sskh) else "",
+            "srgf":    sane(srgf[i]) if i < len(srgf) else "",
         })
 
     # ── dicionário final ---------------------------------------------

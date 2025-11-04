@@ -16,14 +16,14 @@ from PyQt5.QtWidgets import QDialog, QListWidgetItem
 class Ui_Dialog(object):
     def setupUi(self, Dialog):
         Dialog.setObjectName("Dialog")
-        Dialog.resize(400, 300)
+        Dialog.resize(625, 549)
         self.buttonBox = QtWidgets.QDialogButtonBox(Dialog)
-        self.buttonBox.setGeometry(QtCore.QRect(30, 240, 341, 32))
+        self.buttonBox.setGeometry(QtCore.QRect(200, 440, 341, 32))
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
         self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
         self.buttonBox.setObjectName("buttonBox")
         self.listWidget = QtWidgets.QListWidget(Dialog)
-        self.listWidget.setGeometry(QtCore.QRect(50, 30, 256, 192))
+        self.listWidget.setGeometry(QtCore.QRect(50, 30, 501, 391))
         self.listWidget.setObjectName("listWidget")
 
         self.retranslateUi(Dialog)
@@ -33,7 +33,7 @@ class Ui_Dialog(object):
 
     def retranslateUi(self, Dialog):
         _translate = QtCore.QCoreApplication.translate
-        Dialog.setWindowTitle(_translate("Dialog", "Dialog"))
+        Dialog.setWindowTitle(_translate("Soil Profile List", "Soil Profile List"))
 
 
 class ProfileListDialog(QDialog):
@@ -55,7 +55,9 @@ class ProfileListDialog(QDialog):
     def populateProfiles(self, profiles):
         self.ui.listWidget.clear()
         for p in profiles:
-            item = QListWidgetItem(p["code"])
+            # prefere 'label', mas funciona se só houver 'code'
+            text = p.get("label", p["code"])
+            item = QListWidgetItem(text)
             item.setData(Qt.UserRole, p)
             self.ui.listWidget.addItem(item)
 
