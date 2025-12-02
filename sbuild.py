@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'sbuild.ui'
+# Form implementation generated from reading ui file 'ui_files/sbuild.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -29,6 +29,9 @@ class Ui_MainWindow(object):
         self.stackedWidget.setSizePolicy(sizePolicy)
         self.stackedWidget.setMinimumSize(QtCore.QSize(952, 541))
         self.stackedWidget.setObjectName("stackedWidget")
+        self.newFile_page0 = QtWidgets.QWidget()
+        self.newFile_page0.setObjectName("newFile_page0")
+        self.stackedWidget.addWidget(self.newFile_page0)
         self.newFile_page1 = QtWidgets.QWidget()
         self.newFile_page1.setObjectName("newFile_page1")
         self.horizontalGenInfo = QtWidgets.QGroupBox(self.newFile_page1)
