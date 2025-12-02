@@ -47,6 +47,7 @@
     <property name="currentIndex">
      <number>0</number>
     </property>
+    <widget class="QWidget" name="newFile_page0"/>
     <widget class="QWidget" name="newFile_page1">
      <widget class="QGroupBox" name="horizontalGenInfo">
       <property name="geometry">
