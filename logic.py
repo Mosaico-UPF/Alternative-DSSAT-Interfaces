@@ -1,6 +1,6 @@
 import sys
 import tempfile
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QPixmap, QFont
 import os
 from typing import Optional
 from pathlib import Path
@@ -10,7 +10,12 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QComboBox,
     QDialog,
-    QTableWidgetItem
+    QTableWidgetItem,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QWidget
 )
 from PyQt5.QtCore import Qt
 import math
@@ -20,37 +25,8 @@ from readSoilFile import read_profile, show_profiles
 from createSoilFile import build_soil_file
 from updateSoilFile import update_soil_file
 from deleteSoilFile import delete_soil_profile
-from hydrology import slope_from_cn
-
-def runoff_group(cn: float) -> str:
-    if cn <= 70:
-        return "Lowest"              # Grupo A
-    elif cn <= 80:
-        return "Moderately Low"      # Grupo B
-    elif cn <= 90:
-        return "Moderately High"     # Grupo C
-    else:
-        return "Highest"             # Grupo D
-
-def drainage_class(dr_val: float | None) -> str:
-    if dr_val is None or dr_val < 0:
-        return ""
-
-    # tabela em ordem crescente
-    table = [
-        ("Very Poorly",        0.01),
-        ("Poorly",             0.05),
-        ("Somewhat poorly",    0.25),
-        ("Moderately well",    0.40),
-        ("Well",               0.60),
-        ("Somewhat excessive", 0.75),
-        ("Excessive",          0.85),
-        ("Very Excessive",     0.95),
-    ]
-    for label, val in table:
-        if dr_val <= val + 1e-6:      # primeiro valor ≥ SLDR
-            return label
-    return "Very Excessive"           # SLDR maior que 0.95
+from hydrology import slope_from_cn, cn_to_group
+from soil_utils import drainage_class
 
 class MainWindow(QtWidgets.QMainWindow):
     
@@ -61,6 +37,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.currentSolFile = None
         self._pendingSave = None
         self.currentProfile: Optional[dict] = None
+        
+        # Configura a página inicial (página 0)
+        self._setup_welcome_page()
+        
         self.ui.buttonBox.accepted.connect(self.handlePage0Ok)
         self.ui.buttonBox.rejected.connect(self.handlePage0Cancel)
         self.ui.buttonBox_3.accepted.connect(self.goToFinalPage)
@@ -77,7 +57,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.tableWidget.setSortingEnabled(False)
         self.tableCalc = self.ui.tableWidget_3
         self.ui.pushButton_4.setEnabled(False)
-        # dispara sempre que o usuário muda de página no wizard
         self.ui.actionOpen.triggered.connect(self.openSolFile)
         self.ui.actionClose_2.triggered.connect(self.closeSolFile)
         self.ui.actionEdit_3.triggered.disconnect()
@@ -90,13 +69,81 @@ class MainWindow(QtWidgets.QMainWindow):
         self._prepare_combo(self.ui.color_box)
         self._prepare_combo(self.ui.drainage_box)
         self._prepare_combo(self.ui.runoffPotential_box)
-        # Inside your MainWindow __init__, after setupUi(...)
+        
         self.fileStatusAction = QtWidgets.QAction("", self)
         self.fileStatusAction.setEnabled(False)
         mb = self.menuBar()
         assert mb is not None, "menuBar não inicializado"
         mb.addAction(self.fileStatusAction)
         mb.setStyleSheet("QMenuBar::item:disabled { color: black; }")
+
+    def _setup_welcome_page(self):
+        """Configura a página inicial (newFile_page0) com logo e texto SBuild"""
+        page0 = self.ui.newFile_page0
+        
+        # Remove qualquer layout existente
+        if page0.layout():
+            QWidget().setLayout(page0.layout())
+        
+        # Layout principal centralizado
+        main_layout = QVBoxLayout(page0)
+        main_layout.setAlignment(Qt.AlignCenter)
+        
+        # Container para logo + texto
+        container = QWidget()
+        h_layout = QHBoxLayout(container)
+        h_layout.setAlignment(Qt.AlignCenter)
+        h_layout.setSpacing(20)
+        
+        # Logo
+        logo_label = QLabel()
+        logo_path = os.path.join(os.path.dirname(__file__), 'ui_files', 'Logo.png')
+        
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            scaled_pixmap = pixmap.scaled(
+                350, 250, 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            logo_label.setPixmap(scaled_pixmap)
+        else:
+            # Fallback se a logo não for encontrada
+            logo_label.setText("[Logo not found]")
+            logo_label.setStyleSheet("font-size: 20px; color: red;")
+            print(f"Logo não encontrada em: {logo_path}")
+        
+        h_layout.addWidget(logo_label)
+        
+        # Texto "SBuild"
+        text_label = QLabel("SBuild")
+        font = QFont("Arial", 80, QFont.Bold)
+        text_label.setFont(font)
+        text_label.setStyleSheet("color: black;")
+        h_layout.addWidget(text_label)
+        
+        main_layout.addWidget(container)
+        
+        # Botão "Start"
+        start_button = QPushButton("Start")
+        start_button.setFixedSize(150, 40)
+        start_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        start_button.clicked.connect(lambda: self.ui.stackedWidget.setCurrentIndex(1))
+        
+        button_layout = QHBoxLayout()
+        button_layout.setAlignment(Qt.AlignCenter)
+        button_layout.addWidget(start_button)
+        main_layout.addLayout(button_layout)
 
     def addLayer(self) -> None:
         """Adiciona uma nova camada (+ 5 cm) sincronizando TODAS as grades."""
@@ -286,13 +333,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.slope_line.setText(slope_txt)
 
             if rc > 0:
-                self.ui.runoffPotential_box.setCurrentText(runoff_group(rc))
+                self.ui.runoffPotential_box.setCurrentText(cn_to_group(rc))
             else:
                 self.ui.runoffPotential_box.setCurrentIndex(-1)
         
         else:
             if rc > 0:
-                txt_ro = runoff_group(rc)
+                txt_ro = cn_to_group(rc)
                 self.ui.runoffPotential_box.setCurrentText(txt_ro)
                 slope_val = slope_from_cn(txt_ro, int(rc))
                 self.ui.slope_line.setText("" if slope_val is None else str(slope_val))
