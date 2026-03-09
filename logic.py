@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QWidget
 )
 from PyQt5.QtCore import Qt
@@ -38,7 +37,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._pendingSave = None
         self.currentProfile: Optional[dict] = None
         
-        # Configura a página inicial (página 0)
+        # Configura a página inicial (índice 0)
         self._setup_welcome_page()
         
         self.ui.buttonBox.accepted.connect(self.handlePage0Ok)
@@ -65,10 +64,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionDelete_3.triggered.connect(self.askDeleteProfile)
         self.ui.actionExit.triggered.connect(self.handlePage0Cancel)
         self.ui.actionNew_3.triggered.connect(self.newSolFile)
+        self.ui.actionSave_as_2.triggered.connect(self.saveAsFile)
         self.ui.stackedWidget.currentChanged.connect(self._on_page_changed)
         self._prepare_combo(self.ui.color_box)
         self._prepare_combo(self.ui.drainage_box)
         self._prepare_combo(self.ui.runoffPotential_box)
+
+        # limites de caracteres General Information 
+        for field in (self.ui.country_line,
+                      self.ui.siteName_line,
+                      self.ui.soilData_line):
+            field.setMaxLength(11)
+        for field in (self.ui.soilSeries_line,
+                      self.ui.soilClassification_line):
+            field.setMaxLength(50)
         
         self.fileStatusAction = QtWidgets.QAction("", self)
         self.fileStatusAction.setEnabled(False)
@@ -89,7 +98,7 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout = QVBoxLayout(page0)
         main_layout.setAlignment(Qt.AlignCenter)
         
-        # Container para logo + texto
+        # Container para logo e texto
         container = QWidget()
         h_layout = QHBoxLayout(container)
         h_layout.setAlignment(Qt.AlignCenter)
@@ -124,35 +133,22 @@ class MainWindow(QtWidgets.QMainWindow):
         
         main_layout.addWidget(container)
         
-        # Botão "Start"
-        start_button = QPushButton("Start")
-        start_button.setFixedSize(150, 40)
-        start_button.setStyleSheet("""
-            QPushButton {
-                font-size: 16px;
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
-        start_button.clicked.connect(lambda: self.ui.stackedWidget.setCurrentIndex(1))
-        
-        button_layout = QHBoxLayout()
-        button_layout.setAlignment(Qt.AlignCenter)
-        button_layout.addWidget(start_button)
-        main_layout.addLayout(button_layout)
+        # Mensagem de instrução
+        hint_label = QLabel("Open or create a new soil file")
+        hint_font = QFont("Arial", 14)
+        hint_label.setFont(hint_font)
+        hint_label.setStyleSheet("color: #555555;")
+        hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter) 
+        main_layout.addWidget(hint_label)
 
     def addLayer(self) -> None:
-        """Adiciona uma nova camada (+ 5 cm) sincronizando TODAS as grades."""
+        """Adiciona uma nova camada (+ 5 cm) sincronizando as grades."""
         tw1 = self.ui.tableWidget          # grade principal
-        tw2 = self.ui.tableWidget_2        # “More inputs”
-        tw3 = self.tableCalc               # “Calculate/Edit Soil Parameters”
+        tw2 = self.ui.tableWidget_2        # "More inputs"
+        tw3 = self.tableCalc               # "Calculate/Edit Soil Parameters"
         r   = tw1.rowCount()               # índice da nova linha
 
-        # ── profundidade -------------------------------------------------------
+        # profundidade 
         if r == 0:
             depth_val = 5
         else:
@@ -161,12 +157,17 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 depth_val = 5
 
-        # ── insere linha nas três tabelas -------------------------------------
+        _ro = Qt.ItemIsEnabled | Qt.ItemIsSelectable  # type: ignore[attr-defined]
+
+        # insere linha nas três tabelas
         for tw in (tw1, tw2, tw3):
             tw.insertRow(r)
-            tw.setItem(r, 0, QTableWidgetItem(str(depth_val)))
+            depth_item = QTableWidgetItem(str(depth_val))
+            if tw in (tw2, tw3):   # More Inputs e Calculate/Edit: depth read-only
+                depth_item.setFlags(_ro)
+            tw.setItem(r, 0, depth_item)
 
-        # coluna “Master horizon” (grade principal) com default –99
+        # coluna "Master horizon" (grade principal) com default –99
         tw1.setItem(r, 1, QTableWidgetItem("-99"))
 
         self.checkButton()
@@ -190,74 +191,75 @@ class MainWindow(QtWidgets.QMainWindow):
         ) != QMessageBox.Yes:
             return                               # cancelado
 
-        # ── zera variáveis de estado ────────────────────────────────
+        # zera variáveis de estado 
         self.currentSolFile = None
         self.currentProfile = None
         self.fileStatusAction.setText("")
 
-        # ── limpa campos “General Information” ──────────────────────
+        # limpa campos "General Information"
         self.cleanFields()
 
-        # ── limpa superfície (aba Page 1) ───────────────────────────
+        # limpa superfície (aba Page 1)
         self.ui.color_box.setCurrentIndex(-1)
         self.ui.drainage_box.setCurrentIndex(-1)
         self.ui.runoffPotential_box.setCurrentIndex(-1)
         self.ui.slope_line.clear()
         self.ui.fertilityFactor_line.clear()
 
-        # ── limpa campos da aba “Calculate/Edit” ────────────────────
+        # limpa campos da aba "Calculate/Edit soil parameters" 
         self.ui.lineEdit.clear()      # Runoff Curve Number
         self.ui.lineEdit_2.clear()    # Albedo
         self.ui.lineEdit_3.clear()    # Drainage Rate
 
-        # ── limpa as três tabelas de camadas ────────────────────────
+        # limpa as três tabelas de camadas 
         for tw in (self.ui.tableWidget,
                    self.ui.tableWidget_2,
                    self.tableCalc):
             tw.setRowCount(0)
 
-        self.checkButton()            # atualiza estado do botão “Delete”
+        self.checkButton()            # atualiza estado do botão Delete
+        self.ui.stackedWidget.setCurrentIndex(0)
 
     def newSolFile(self) -> None:
-        if not self.currentSolFile:
-            return                               # nenhum arquivo aberto
-
-        if QMessageBox.question(
-            self,
-            "New file",
-            "Are you sure you want to create a new file?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        ) != QMessageBox.Yes:
-            return                               # cancelado
-
-        # ── zera variáveis de estado ────────────────────────────────
+        # limpa estado e campos
         self.currentSolFile = None
         self.currentProfile = None
         self.fileStatusAction.setText("")
-
-        # ── limpa campos “General Information” ──────────────────────
         self.cleanFields()
-
-        # ── limpa superfície (aba Page 1) ───────────────────────────
         self.ui.color_box.setCurrentIndex(-1)
         self.ui.drainage_box.setCurrentIndex(-1)
         self.ui.runoffPotential_box.setCurrentIndex(-1)
         self.ui.slope_line.clear()
         self.ui.fertilityFactor_line.clear()
-
-        # ── limpa campos da aba “Calculate/Edit” ────────────────────
-        self.ui.lineEdit.clear()      # Runoff Curve Number
-        self.ui.lineEdit_2.clear()    # Albedo
-        self.ui.lineEdit_3.clear()    # Drainage Rate
-
-        # ── limpa as três tabelas de camadas ────────────────────────
-        for tw in (self.ui.tableWidget,
-                   self.ui.tableWidget_2,
-                   self.tableCalc):
+        self.ui.lineEdit.clear()
+        self.ui.lineEdit_2.clear()
+        self.ui.lineEdit_3.clear()
+        for tw in (self.ui.tableWidget, self.ui.tableWidget_2, self.tableCalc):
             tw.setRowCount(0)
+        self.checkButton()
 
-        self.checkButton()            # atualiza estado do botão “Delete”
+        # avança para General Information
+        self.ui.stackedWidget.setCurrentIndex(1)
+
+    def saveAsFile(self) -> None:
+        """Escolhe destino e grava o estado atual como um novo arquivo .SOL."""
+        file_name, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save As",
+            "",
+            "DSSAT Soil Files (*.SOL);;All files (*)",
+        )
+        if not file_name:
+            return
+        if not file_name.upper().endswith(".SOL"):
+            file_name += ".SOL"
+        # cria arquivo vazio com cabeçalho e define como atual
+        Path(file_name).write_text("*SOILS: General DSSAT Soil Input File\n\n",
+                                   encoding="utf-8")
+        self.setCurrentSolFile(file_name)
+        self.currentProfile = None
+        # grava o conteúdo atual
+        self.writeSolFile()
 
     def cleanFields(self):
         self.ui.country_line.clear()
@@ -270,7 +272,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.soilClassification_line.clear()
 
     def populateFieldsFromProfile(self, profile: dict) -> None:
-        # ─── caminho do .SOL + código ─────────────────────────────────
+        # caminho e código do .SOL 
         sol0 = self.getCurrentSolFile()
         if sol0 is None:
             QMessageBox.warning(self, "Warning", "No .SOL file opened.")
@@ -279,7 +281,7 @@ class MainWindow(QtWidgets.QMainWindow):
         code = profile["code"]
         data = read_profile(sol, code)
 
-        # === General Information =====================================
+        # General Information 
         self.ui.country_line.setText(data["country"])
         self.ui.siteName_line.setText(data["site_name"])
         self.ui.instituteCode_line.setText(data["institute_code"])
@@ -289,7 +291,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.soilSeries_line.setText(data["soil_series_name"])
         self.ui.soilClassification_line.setText(data["soil_classification"])
 
-        # === Surface Information =====================================
+        # Surface Information 
         cmap = {
             "BL": "Black", "BK": "Black",
             "BN": "Brown", "BR": "Brown",
@@ -298,15 +300,38 @@ class MainWindow(QtWidgets.QMainWindow):
             "Y":  "Yellow","YL": "Yellow",
         }
 
-        # --- Color ----------------------------------------------------
+        # Color 
+        cmap = {
+            "BL": "Black", "BK": "Black", "BLA": "Black", "BLAC": "Black", "BLACK": "Black",
+            "BN": "Brown", "BR": "Brown", "BRO": "Brown", "BROW": "Brown", "BROWN": "Brown",
+            "G":  "Grey",  "GY": "Grey",  "GR":  "Grey",  "GREY": "Grey",  "GRAY": "Grey",
+            "R":  "Red",   "RD": "Red",   "RED": "Red",
+            "Y":  "Yellow","YL": "Yellow","YEL": "Yellow","YELL": "Yellow","YELLOW": "Yellow",
+        }
         code_color = (data.get("color_code") or "").strip().upper()
-        if code_color and cmap.get(code_color):
-            self.ui.color_box.setCurrentText(cmap[code_color])
+        color_name = cmap.get(code_color, "")
+
+        # fallback: deduz cor do albedo SALB quando SCOM está ausente
+        if not color_name:
+            try:
+                salb = float(data.get("albedo") or -1)
+                if 0.07 <= salb <= 0.11:
+                    color_name = "Black"
+                elif 0.11 < salb <= 0.135:
+                    color_name = "Brown"
+                elif 0.135 < salb <= 0.155:
+                    color_name = "Red"
+                elif 0.155 < salb <= 0.175:
+                    color_name = "Yellow"
+            except (TypeError, ValueError):
+                pass
+
+        if color_name:
+            self.ui.color_box.setCurrentText(color_name)
         else:
-            # nulo ou código desconhecido → não selecionar nada
             self.ui.color_box.setCurrentIndex(-1)
 
-        # Drainage class (combo) --------------------------------------
+        # Drainage class
         try:
             dr_val = float(data["drainage_rate"])
         except (TypeError, ValueError):
@@ -319,7 +344,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.ui.drainage_box.setCurrentIndex(-1)
 
-        # Run-off potential & % slope ---------------------------------
+        # Runoff potential e % slope
         slope_txt = (data.get("slope")
                      or data.get("%slope")
                      or data.get("slope_percent")
@@ -350,8 +375,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ff = data.get("fertility_factor")
         self.ui.fertilityFactor_line.setText("" if ff in (None, "", "-99") else str(ff))
 
-        # === Surface-parameter widgets na aba “Calculate/Edit” =======
-        # ajuste os nomes se seus QLineEdits forem diferentes
+        # Surface parameters widgets na aba Calculate/Edit soil parameters
         rc_val = data.get("runoff_curve")
         self.ui.lineEdit.setText("" if rc_val in (None, "", "-99") else str(rc_val))  # SLRO
         salb_val = data.get("albedo")
@@ -359,20 +383,20 @@ class MainWindow(QtWidgets.QMainWindow):
         sldr_val = data.get("drainage_rate")
         self.ui.lineEdit_3.setText("" if sldr_val in (None, "", "-99") else str(sldr_val))  # SLDR
 
-        # === Layers tables (principal + more-inputs + calculate) =====
+        # Layers tables (principal, more inputs e calculate)
         tw_main = self.ui.tableWidget
         tw_more = self.ui.tableWidget_2
-        tw_calc = self.tableCalc          # grade da aba “Calculate/Edit”
+        tw_calc = self.tableCalc          # grade da aba Calculate/Edit soil parameters
 
         # limpa todas
         for tw in (tw_main, tw_more, tw_calc):
             tw.setRowCount(0)
 
-        # ordem exata das colunas de cada grade -----------------------
+        # ordem exata das colunas de cada grade
         main_keys = ["depth", "texture", "clay", "silt",
                     "stones", "oc", "ph", "cec", "tn"]
 
-        # grade de cálculo – todas as colunas já existentes no .ui
+        # grade de cálculo
         calc_keys = ["depth", "clay", "silt", "stones",
                     "lll", "dul", "sat", "bd", "ksat", "srgf"]
 
@@ -383,16 +407,23 @@ class MainWindow(QtWidgets.QMainWindow):
             for tw in (tw_main, tw_more, tw_calc):
                 tw.insertRow(r)
 
-            # ── grade principal ---------------------------------------
+            # grade principal 
             for c, k in enumerate(main_keys):
                 tw_main.setItem(r, c, QTableWidgetItem(layer.get(k, "")))
 
-            # ── more-inputs: apenas profundidade (espelhada) ----------
-            tw_more.setItem(r, 0, QTableWidgetItem(layer.get("depth", "")))
+            # grade de more inputs
+            _ro2 = Qt.ItemIsEnabled | Qt.ItemIsSelectable  # type: ignore[attr-defined]
+            depth_item = QTableWidgetItem(layer.get("depth", ""))
+            depth_item.setFlags(_ro2)
+            tw_more.setItem(r, 0, depth_item)
 
-            # ── grade de cálculo (todos os parâmetros) ----------------
+            # grade de cálculo
+            _ro = Qt.ItemIsEnabled | Qt.ItemIsSelectable  # type: ignore[attr-defined]
             for c, k in enumerate(calc_keys):
-                tw_calc.setItem(r, c, QTableWidgetItem(layer.get(k, "")))
+                item = QTableWidgetItem(layer.get(k, ""))
+                if c < 4:          # depth, clay, silt, stones read only
+                    item.setFlags(_ro)
+                tw_calc.setItem(r, c, item)
 
         self.checkButton()
 
@@ -405,90 +436,73 @@ class MainWindow(QtWidgets.QMainWindow):
             "Arquivos DSSAT (*.SOL);;Todos os arquivos (*)",
             options=options
         )
-        if file_name:
-            self.setCurrentSolFile(file_name)
-            self.fileStatusAction.setText(os.path.basename(file_name))
         if not file_name:
             return  # Usuário cancelou
-        else: 
-            self.setCurrentSolFile(file_name)
-        try:
-            # Chama show_profiles para extrair os perfis do arquivo selecionado
-            profiles = show_profiles(file_name)  # Retorna uma lista de dicionários
 
-            if profiles:
-                # Extrai o código de cada perfil para exibição
-                message = "\n\n".join(
-                f"Perfil: {profile['code']}\n{profile['content']}" for profile in profiles
-            )
-                #QMessageBox.information(self, "Perfis de Solo", f"Perfis encontrados:\n{message}")
-            else:
-                QMessageBox.information(self, "Perfis de Solo", "Nenhum perfil encontrado no arquivo.")
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao ler o arquivo:\n{e}")
+        self.setCurrentSolFile(file_name)
+        self.currentProfile = None
+        self.ui.stackedWidget.setCurrentIndex(1)
     
     def setCurrentSolFile(self, file_name: str):
         self.currentSolFile = file_name
         full_path = os.path.abspath(file_name)
         self.fileStatusAction.setText(f"Working with file {full_path}")
 
-    # ──────────────────────────────────────────────────────────────────────
     def closeProfile(self) -> None:
         """
-        Resets the UI back to the “no-profile-selected” state **without**
+        Resets the UI back to the "no-profile-selected" state without
         closing the .SOL file itself.
         """
         if self.currentProfile is None:
-            return  # nothing to do
+            return
 
-        # 1. forget the selection
+        # forget the selection
         self.currentProfile = None
 
-        # 2. clear General-Information fields
+        # clear General Information fields
         self.cleanFields()
 
-        # 3. reset surface widgets (Page 1)
+        # reset surface widgets (Page 1)
         self.ui.color_box.setCurrentIndex(-1)
         self.ui.drainage_box.setCurrentIndex(-1)
         self.ui.runoffPotential_box.setCurrentIndex(-1)
         self.ui.slope_line.clear()
         self.ui.fertilityFactor_line.clear()
 
-        # 4. reset Calculate/Edit widgets (Page 2)
+        # reset Calculate/Edit soil parameters widgets (Page 2)
         self.ui.lineEdit.clear()      # SLRO
         self.ui.lineEdit_2.clear()    # SALB
         self.ui.lineEdit_3.clear()    # SLDR
 
-        # 5. wipe the three layer tables
+        # wipe the three layer tables
         for tw in (self.ui.tableWidget,
                 self.ui.tableWidget_2,
                 self.tableCalc):
             tw.setRowCount(0)
 
-        # 6. update buttons that depend on row count
+        # update buttons that depend on row count
         self.checkButton()
-    # ──────────────────────────────────────────────────────────────────────
 
+        self.ui.stackedWidget.setCurrentIndex(1)
 
     def getCurrentSolFile(self) -> Optional[str]:
         return self.currentSolFile
     
-    # ↓ cole dentro da classe MainWindow (fora de qualquer outro método) ─────
-# -----------------------------------------------------------------------
     def _collect_layers(self) -> list[dict]:
-        """Lê TODAS as linhas da grade principal e devolve [{SLB, SLLL, …}, …]."""
+        """Lê todas as linhas da grade principal e devolve [{SLB, SLLL, …}, …]."""
         tw_main = self.ui.tableWidget
+        tw_more = self.ui.tableWidget_2
         tw_calc = self.tableCalc
 
         layers: list[dict] = []
         for r in range(tw_main.rowCount()):
             try:  # profundidade é obrigatória
-                slb = int(tw_main.item(r, 0).text())
+                slb = int(float(tw_main.item(r, 0).text()) + 0.5)
             except Exception:
                 continue     # pula linhas vazias
 
             layer = {
-                # básicos (grade principal) -------------------------------
+                # grade principal
                 "slb":  slb,
                 "slmh":   tw_main.item(r, 1).text()  if tw_main.item(r, 1)  else "-99",
                 "slcl":   tw_main.item(r, 2).text()  if tw_main.item(r, 2)  else -99,
@@ -498,7 +512,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 "slhw":   tw_main.item(r, 6).text()  if tw_main.item(r, 6)  else -99,
                 "scec":   tw_main.item(r, 7).text()  if tw_main.item(r, 7)  else -99,
                 "slni":   tw_main.item(r, 8).text()  if tw_main.item(r, 8)  else -99,
-                # hidráulicos (grade cálculo) ----------------------------
+                # more inputs
+                "slpa":   tw_more.item(r, 1).text()  if tw_more.item(r, 1)  else "-99",
+                "slpb":   tw_more.item(r, 2).text()  if tw_more.item(r, 2)  else "-99",
+                "caco3":  tw_more.item(r, 3).text()  if tw_more.item(r, 3)  else "-99",
+                "slal":   tw_more.item(r, 4).text()  if tw_more.item(r, 4)  else "-99",
+                "slke":   tw_more.item(r, 5).text()  if tw_more.item(r, 5)  else "-99",
+                "sadc":   tw_more.item(r, 6).text()  if tw_more.item(r, 6)  else "-99",
+                "slca":   tw_more.item(r, 7).text()  if tw_more.item(r, 7)  else "-99",
+                # grade de cálculo
                 "slll":   tw_calc.item(r, 4).text()  if tw_calc.item(r, 4)  else -99,
                 "sdul":   tw_calc.item(r, 5).text()  if tw_calc.item(r, 5)  else -99,
                 "ssat":   tw_calc.item(r, 6).text()  if tw_calc.item(r, 6)  else -99,
@@ -508,52 +530,53 @@ class MainWindow(QtWidgets.QMainWindow):
             }
             layers.append(layer)
         return layers
-    # -----------------------------------------------------------------------
 
     def _sync_calc_from_main(self) -> None:
         """
-        Copia Depth, Clay, Silt e Stones da grade principal
-        para a grade Calculate/Edit, mantendo as linhas alinhadas.
-        Só é chamada quando estamos criando um NOVO perfil.
+        Copia Depth, Clay, Silt e Stones da grade principal 
+        para a grade Calculate/Edit soil parameters
+        Só é chamada quando se é criado um novo perfil.
         """
-        tw_main = self.ui.tableWidget      # grade “Input table”
-        tw_calc = self.tableCalc           # grade “Calculate/Edit”
+        tw_main = self.ui.tableWidget      # grade Input table
+        tw_calc = self.tableCalc           # grade Calculate/Edit soil parameters
 
         rows = tw_main.rowCount()
-        tw_calc.setRowCount(rows)          # garante mesmo nº de linhas
+        tw_calc.setRowCount(rows)          # garante mesmo número de linhas
+
+        _READ_ONLY = Qt.ItemIsEnabled | Qt.ItemIsSelectable  # type: ignore[attr-defined]
 
         for r in range(rows):
-            # (coluna na grade principal → coluna na grade calc)
             mapping = {
-                0: 0,   # Depth → Depth
-                2: 1,   # Clay  → Clay
-                3: 2,   # Silt  → Silt
-                4: 3,   # Stones→ Stones
+                0: 0,   # Depth > Depth
+                2: 1,   # Clay > Clay
+                3: 2,   # Silt > Silt
+                4: 3,   # Stones > Stones
             }
             for src_col, dst_col in mapping.items():
                 src_item = tw_main.item(r, src_col)
-                if src_item:
-                    tw_calc.setItem(r, dst_col,
-                                    QTableWidgetItem(src_item.text()))
-    # ---------------------------------------------------------------
+                text = src_item.text() if src_item else ""
+                item = QTableWidgetItem(text)
+                item.setFlags(_READ_ONLY)
+                tw_calc.setItem(r, dst_col, item)
 
-    _CALC_PAGE_INDEX = 3          # 2 se a aba “Calculate/Edit” for a 3ª página;
-                                # 3 se for a 4ª (parece ser 2 pelo seu .ui)
+    _CALC_PAGE_INDEX       = 4   # goToFinalPage > setCurrentIndex(4)
+    _MORE_INPUTS_PAGE_INDEX = 3  # More Inputs > setCurrentIndex(3)
 
     def _on_page_changed(self, idx: int) -> None:
-        """
-        Copia Depth, Clay, Silt e Stones do Input-Table para a grade
-        Calculate/Edit assim que a aba é exibida **somente**
-        quando estamos criando um perfil novo (nenhum .SOL aberto e
-        self.currentProfile == None).
-        """
-        if idx != self._CALC_PAGE_INDEX:               # não é a página alvo
+        if self.currentProfile is not None:
             return
-        if self.currentProfile is not None:            # perfil carregado? não copia
-            return
-        if any(self.tableCalc.item(r, 0) for r in range(self.tableCalc.rowCount())):
-            return                                     # grade cálculo já preenchida
-        self._sync_calc_from_main()                    # faz o espelhamento
+        _ro = Qt.ItemIsEnabled | Qt.ItemIsSelectable  # type: ignore[attr-defined]
+        tw_main = self.ui.tableWidget
+        if idx == self._MORE_INPUTS_PAGE_INDEX:
+            # sincroniza depth do Input Table para More Inputs
+            tw_more = self.ui.tableWidget_2
+            for r in range(tw_main.rowCount()):
+                src = tw_main.item(r, 0)
+                item = QTableWidgetItem(src.text() if src else "")
+                item.setFlags(_ro)
+                tw_more.setItem(r, 0, item)
+        elif idx == self._CALC_PAGE_INDEX:
+            self._sync_calc_from_main()
 
     def _write_profile(self, profile_id: str, sol_path: Optional[Path]) -> None:
         """
@@ -568,7 +591,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not layers:
             raise ValueError("Tabela de camadas vazia.")
 
-        # --- cabeçalho ---------------------------------------------------
+        # header
         kwargs = dict(
             profile_id          = profile_id,
             site                = self.ui.siteName_line.text()         or "-99",
@@ -587,40 +610,38 @@ class MainWindow(QtWidgets.QMainWindow):
                                 "Red":"R","Yellow":"Y"}.get((self.ui.color_box.currentText() or "").strip(), ""),
         )
 
-        if sol_path is None:             # 1) novo arquivo
+        if sol_path is None:    # 1) novo arquivo
             dest = QFileDialog.getSaveFileName(self,
                                             "Salvar novo arquivo .SOL",
                                             f"{profile_id}.SOL",
                                             "Arquivos DSSAT (*.SOL)")[0]
-            if not dest:  # cancelado
+            if not dest:    # cancelado
                 return
             build_soil_file(dest=dest, **kwargs)
 
-        elif self.currentProfile is None:          # 2) append a novo perfil
-            # --- cria arquivo-temporário REALMENTE provisório -------------
+        elif self.currentProfile is None:   # 2) append a novo perfil
+            # cria arquivo temporário provisório
             with tempfile.NamedTemporaryFile(
                     delete=False, suffix=".SOL", mode="w", encoding="utf-8") as tf:
                 tmp_path = Path(tf.name)
 
-            build_soil_file(dest=tmp_path, **kwargs)   # gera bloco sozinho
+            build_soil_file(dest=tmp_path, **kwargs)    # gera bloco sozinho
 
-            # carrega o bloco recém-criado (descarta cabeçalhos de arquivo)
+            # carrega o bloco recém criado
             new_block = "\n".join(
                 tmp_path.read_text(encoding="utf-8").splitlines()[2:]
             )
-            tmp_path.unlink()                          # remove o temporário
+            tmp_path.unlink()   # remove o temporário
 
-            # --- anexa ao .SOL original -------------------------------------------------
-            # garante \n antes/depois para nunca “colar” perfis
-            # -- anexa ao .SOL original -----------------------------------------
+            # anexa ao .SOL original
             with open(sol_path, "r+", encoding="utf-8") as f:
                 content = f.read()
 
-                # prefixo que garante SEMPRE uma linha vazia de separação
+                # prefixo que gera sempre uma linha vazia de separação
                 if content.endswith("\n"):
-                    prefix = "\n"          # já havia \n final  → adiciona mais 1
+                    prefix = "\n"          # já havia \n final: adiciona mais 1
                 else:
-                    prefix = "\n\n"        # faltava \n final  → fecha e cria a vazia
+                    prefix = "\n\n"        # faltava \n final: fecha e cria a vazia
 
                 if not new_block.endswith("\n"):
                     new_block += "\n"
@@ -628,8 +649,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 # grava depois do EOF
                 f.seek(0, os.SEEK_END)
                 f.write(prefix + new_block)
-
-    # -----------------------------------------------------------------------
         
     def openProfileList(self):
         sol = self.getCurrentSolFile()
@@ -645,21 +664,32 @@ class MainWindow(QtWidgets.QMainWindow):
             self.populateFieldsFromProfile(self.currentProfile)
 
     def calculateMissingValues(self) -> None:
-        """
-        Replica o botão “Calculate missing values” do SBuild
-        (versão resumida -- apenas θLL, θDUL, θSAT, BD, Ksat, SRGF).
+        # Calculate missing values: LL, DUL, SAT, BD, Ksat, SRGF.
+        # If OC present for ALL layers: Rawls et al. (1982) for LL/DUL/SAT.
+        # If OC missing for ANY layer:  Saxton et al. (1986) for LL/DUL/SAT.
+        # BD: Rawls & Brakensiek (1985).
+        # Ksat: Saxton et al. (1986).
+        # SRGF: exp(-0.02 * center) if center > 20 cm, else 1.0.
+        tw      = self.tableCalc
+        tw_main = self.ui.tableWidget
+        n       = tw.rowCount()
 
-        Requer que % argila e % silte estejam presentes em TODAS as camadas.
-        """
-        tw = self.tableCalc
-        n   = tw.rowCount()
+        BLUE = QColor(200, 225, 255)
 
-        BLUE = QColor(200, 225, 255)       # marca visual p/ novos valores
-
-        def num(r: int, c: int) -> float | None:
-            """Lê um float da célula (None se vazia ou –99)."""
+        def num_c(r: int, c: int) -> float | None:
+            # Read float from Calculate/edit soil parameters table, none if empty or -99.
             item = tw.item(r, c)
-            if not item:                    return None
+            if not item: return None
+            try:
+                v = float(item.text())
+                return None if v == -99 else v
+            except Exception:
+                return None
+
+        def num_m(r: int, c: int) -> float | None:
+            # Read float from main table, none if empty or -99.
+            item = tw_main.item(r, c)
+            if not item: return None
             try:
                 v = float(item.text())
                 return None if v == -99 else v
@@ -667,84 +697,123 @@ class MainWindow(QtWidgets.QMainWindow):
                 return None
 
         def put(r: int, c: int, value: float, fmt: str = ".3f") -> None:
-            """Escreve na célula e pinta de azul se antes estava vazia."""
-            if tw.item(r, c):               # já existia → não muda
+            # Write to cell only if it was empty then highlight in blue.
+            if tw.item(r, c):
                 return
-            item = QTableWidgetItem(format(value, fmt))
-            item.setBackground(BLUE)
-            tw.setItem(r, c, item)
+            it = QTableWidgetItem(format(value, fmt))
+            it.setBackground(BLUE)
+            tw.setItem(r, c, it)
 
-        # ── loop camada a camada ─────────────────────────────────────────
+        # Pre-check: clay and silt must be present in every layer
         for r in range(n):
-            depth = num(r, 0)              # centro da layer (cm) – opcional
-            clay  = num(r, 1)
-            silt  = num(r, 2)
-            sand  = None if None in (clay, silt) else max(0, 100 - clay - silt)
-            om    = 1.72 * num(r, 5) if num(r, 5) is not None else 0  # %MO≈1.72×%C
-
-            if None in (clay, silt):
+            if num_c(r, 1) is None or num_c(r, 2) is None:
                 QMessageBox.warning(self, "Missing texture",
                                     "Each layer needs % clay and % silt "
                                     "before running this calculation.")
                 return
 
-            # Saxton & Rawls (2006) – θ à 1500 kPa (LL) e 33 kPa (DUL)
-            if sand is not None:
-                # coefs pequenos arredondados
-                θ1500 = (-0.024*sand) + (0.487*clay) + (0.006*om) \
-                        + (0.005*sand*om) - (0.013*clay*om) + 0.068
-                θ33   = (-0.251*sand) + (0.195*clay) + (0.011*om) \
-                        + (0.006*sand*om) - (0.027*clay*om) + 0.492
+        # Method selection based on OC availability
+        use_rawls = all(num_m(r, 5) is not None for r in range(n))
 
-                put(r, 4, max(0, θ1500/100))        # LL – coluna 4
-                put(r, 5, max(0, θ33  /100))        # DUL – coluna 5
+        prev_depth = 0.0
+        for r in range(n):
+            clay  = num_c(r, 1)   # % clay
+            silt  = num_c(r, 2)   # % silt
+            assert clay is not None and silt is not None
+            sand  = max(0.0, 100.0 - clay - silt)
+            depth = num_c(r, 0) 
 
-            # θSAT = 1 – ρb/2.65   (bd em g cm-3)
-            bd = num(r, 7)
+            # Center of layer used for SRGF
+            bottom = depth if depth is not None else prev_depth + 10.0
+            center = (prev_depth + bottom) / 2.0
+            prev_depth = bottom
+
+            # OC from main table 
+            # OM = OC × 1.724
+            oc = num_m(r, 5)
+            om = oc * 1.724 if oc is not None else 0.0
+
+            # Porosity and θ_SAT (Rawls & Brakensiek 1985)
+            # porosity for BD: φ = 0.299 - 7.251e-4·S + 0.1276·log10(C) + 0.019·OM
+            # θ_SAT: 0.273 - 7.251e-4·S + 0.1276·log10(C) + 0.015·OM
+            log10c = math.log10(clay) if clay > 0 else 0.0
+            porosity = max(0.0, 0.299 - 0.0007251*sand + 0.1276*log10c + 0.019*om)
+            theta_sat = max(0.0, 0.273 - 0.0007251*sand + 0.1276*log10c + 0.015*om)
+
+            # Bulk density: ρb = (1-φ)·2.65
+            bd = num_c(r, 7)
             if bd is None:
-                # Rawls (1983) bulk density
-                bd = 1.636 - 0.005*clay - 0.043*om
+                bd = max(0.1, min(2.65, (1.0 - porosity) * 2.65))
                 put(r, 7, bd, ".2f")
 
-            sat = num(r, 6)
-            if sat is None and bd is not None:
-                sat = max(0, 1 - bd/2.65)
-                put(r, 6, sat)
+            # LL, DUL, SAT
+            if use_rawls:
+                # Rawls et al. (1982) Table 3, Row 1: S, C in %, OM in %
+                theta_dul = 0.2576 - 0.0020*sand + 0.0036*clay + 0.0299*om
+                theta_ll  = 0.0260 + 0.0050*clay + 0.0158*om
 
-            # Ksat – Rawls & Brakensiek (1985) simplificado
-            ksat = num(r, 8)
-            if ksat is None and None not in (clay, silt, bd):
-                log10K = 2.0 - 0.6*(clay/100) - 1.0*(silt/100) - 3.0*(bd/2.65)
-                ksat = 10 ** log10K          # cm h-1
-                put(r, 8, ksat, ".1f")
+                put(r, 4, max(0.0, theta_ll))
+                put(r, 5, max(0.0, theta_dul))
+                put(r, 6, max(0.0, theta_sat))
 
-            # SRGF tradicional: exp(-0.02·z)
-            rgf = num(r, 9)
-            if rgf is None and depth is not None:
-                put(r, 9, max(0, math.exp(-0.02*depth)))
+            else:
+                # Saxton et al. (1986) Eq. 5-6: S, C in %
+                # ψ (kPa) = A × θ^B  →  θ = (ψ/A)^(1/B)
+                # A × 100 converts bars → kPa
+                C = clay
+                S = sand
+                A = math.exp(-4.396 - 0.0715*C
+                             - 0.000488*S**2 - 0.00004285*S**2*C) * 100.0
+                B = -3.140 - 0.00222*C**2 - 0.00003484*S**2*C
 
-        # ── SALB, SWCON, CN2 podem ficar para outra rotina (uma vez / perfil) ──
+                if A > 0 and B < 0:
+                    theta_ll  = (1500.0 / A) ** (1.0 / B)   # 1500 kPa = WP
+                    theta_dul = (33.0   / A) ** (1.0 / B)   # 33 kPa = FC
+
+                    put(r, 4, max(0.0, theta_ll))
+                    put(r, 5, max(0.0, theta_dul))
+                    put(r, 6, max(0.0, theta_sat))
+
+            # Ksat (Saxton 1986 Eq. 10)
+            # KS (cm/h) = exp[(12.012 - 0.0755·S) + (-3.895 + 0.03671·S
+            #              - 0.1103·C + 0.00087546·C²) / θ_SAT]
+            # 2.778e-6 m/s = 1.0 cm/h, so result is directly in cm/h
+            if num_c(r, 8) is None and theta_sat > 0:
+                try:
+                    ln_k = ((12.012 - 0.0755*sand)
+                            + (-3.895 + 0.03671*sand
+                               - 0.1103*clay + 0.00087546*clay**2) / porosity)
+                    ksat = math.exp(ln_k)   # cm/h
+                    put(r, 8, max(0.0, ksat), ".3f")
+                except Exception:
+                    pass
+
+            # SRGF
+            # If center > 20: SRGF = exp(-0.02 × center); else SRGF = 1.0
+            if num_c(r, 9) is None:
+                srgf = 1.0 if center <= 20.0 else math.exp(-0.02 * center)
+                put(r, 9, max(0.0, srgf), ".3f")
+
         QMessageBox.information(self, "Done",
                                 "Missing hydraulic values calculated.")
 
     def writeSolFile(self) -> None:
-        # ── arquivo aberto? ───────────────────────────────────────────
+        # arquivo aberto?
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
             QMessageBox.warning(self, "Warning",
                                 "No .SOL file opened for editing.")
             return
 
-        # ── sempre precisamos das camadas digitadas ───────────────────
+        # pelo menos uma camada
         layers = self._collect_layers()
         if not layers:
             QMessageBox.warning(self, "Error",
                                 "Add at least one soil layer before saving.")
             return
 
-        # ------------------------------------------------------------------
-        # A) PERFIL SELECIONADO  →  atualizar bloco existente
-        # ------------------------------------------------------------------
+        # A) Perfil selecionado: atualizar bloco existente
+
         if self.currentProfile:
             def _f_or_none(txt):
                 t = (txt or "").strip()
@@ -754,12 +823,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
             code = self.currentProfile["code"]
 
-            # trecho da sua writeSolFile  (ramo: perfil selecionado)
             updates = {
                 "site":      self.ui.siteName_line.text()  or "-99",
                 "country":   self.ui.country_line.text()   or "-99",
 
-                # 👇  acrescente tudo o que deseja gravar
                 "lat":  float(self.ui.latitude_line.text()  or 0),
                 "long": float(self.ui.longitude_line.text() or 0),
                 "scom": {"Black":"BL","Brown":"BN","Grey":"G","Red":"R","Yellow":"Y"}.get((self.ui.color_box.currentText() or "").strip(), ""),
@@ -770,10 +837,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 "sldr": float(self.ui.lineEdit_3.text() or 0.60),
                 "slro": float(self.ui.lineEdit.text()  or 61),
 
-                # idem se quiser salvar *soil_data_source*, *scom*, etc.
                 # "soil_data_source": self.ui.soilData_line.text() or "-99",
 
-                "layers": layers,          # mantém as camadas
+                "layers": layers,   # mantém as camadas
             }
 
             try:
@@ -783,11 +849,10 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error",
                                     f"Failed to save:\n{e}")
-            return  # nada mais a fazer
+            return
 
-        # ------------------------------------------------------------------
-        # B) NENHUM perfil selecionado  →  criar NOVO bloco e anexar
-        # ------------------------------------------------------------------
+        # B) Nenhum perfil selecionado: criar novo bloco e anexar
+
         pid, ok = QtWidgets.QInputDialog.getText(
             self, "New profile ID",
             "Enter the new profile code (exactly 10 characters):")
@@ -800,8 +865,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            # _write_profile() extrai todos os campos da UI
-            # e, como self.currentProfile é None, faz o append correto.
+            # _write_profile() extrai todos os campos da UI e, como self.currentProfile é None, faz o append correto.
             self._write_profile(pid, Path(sol))
             QMessageBox.information(self, "OK",
                 f"New soil profile «{pid}» added to «{sol}».")
@@ -809,8 +873,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMessageBox.critical(self, "Error",
                                 f"Failed to save:\n{e}")
 
-    # ---------------------------------------------------------------
-    def askDeleteProfile(self):                                     # ADD
+    def askDeleteProfile(self):                                  
         """Abre a lista de perfis, pergunta qual excluir e faz a remoção."""
         sol = self.getCurrentSolFile()
         if not sol or not Path(sol).exists():
@@ -849,12 +912,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.cleanFields()
 
         QMessageBox.information(self, "OK", f"Profile '{code}' deleted.")
-    # ---------------------------------------------------------------
 
     def _prepare_combo(self, combo: QComboBox):
         combo.setEditable(False)       
         combo.setInsertPolicy(QComboBox.NoInsert)   
-        combo.setCurrentIndex(-1)       # nenhum item selecionado → caixa vazia
+        combo.setCurrentIndex(-1)
 
     def _load_layers(self, layers):
         self.ui.tableWidget.setRowCount(0)
@@ -871,8 +933,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.pushButton_4.setEnabled(has_rows)
 
     def deleteLayer(self) -> None:
-        """Remove a camada selecionada (ou a última, se nada estiver selecionado)
-        sincronizando TODAS as grades (principal, more-inputs, calculate/edit)."""
+        """Remove a camada selecionada ou a última, se nada estiver selecionado
+        sincronizando todas as grades."""
         tw_main = self.ui.tableWidget
         tw_more = self.ui.tableWidget_2
         tw_calc = self.tableCalc
@@ -880,7 +942,7 @@ class MainWindow(QtWidgets.QMainWindow):
         sm = tw_main.selectionModel()
         rows = sorted({idx.row() for idx in sm.selectedRows()}, reverse=True) if sm else []
 
-        # se nada selecionado → remove a última linha, se existir
+        # se nada selecionado, remove a última linha
         if not rows and tw_main.rowCount() > 0:
             rows = [tw_main.rowCount() - 1]
 
@@ -888,13 +950,13 @@ class MainWindow(QtWidgets.QMainWindow):
             for tw in (tw_main, tw_more, tw_calc):
                 tw.removeRow(row)
 
-        self.checkButton()        # re-avalia o estado do botão “Delete”
+        self.checkButton()  # reavalia o estado do botãto Delete
 
     def goToFinalPage(self):
-        self.ui.stackedWidget.setCurrentIndex(3)
-    
+        self.ui.stackedWidget.setCurrentIndex(4)
+
     def goToPage2(self):
-        self.ui.stackedWidget.setCurrentIndex(1)
+        self.ui.stackedWidget.setCurrentIndex(2)
 
     def goForward(self):
         current_index = self.ui.stackedWidget.currentIndex()
@@ -917,7 +979,7 @@ class MainWindow(QtWidgets.QMainWindow):
         current_code = data["current_code"]       # "" for a brand-new profile
         kwargs       = data["kwargs"]
 
-        # ── if it’s a new profile, ask now for the 10-char code ─────
+        # if it’s a new profile, ask now for the 10 character code
         if not kwargs["profile_id"]:
             pid, ok = QtWidgets.QInputDialog.getText(
                 self, "Profile ID",
@@ -930,9 +992,8 @@ class MainWindow(QtWidgets.QMainWindow):
                                     "The code must be exactly 10 characters long.")
                 return
             kwargs["profile_id"] = pid
-            current_code = ""      # treat as brand-new (append)
+            current_code = ""
 
-        # ── do the actual I/O (leverages _write_profile) ────────────
         try:
             self._write_profile(kwargs["profile_id"], sol_path)
         except Exception as e:
@@ -940,7 +1001,6 @@ class MainWindow(QtWidgets.QMainWindow):
                                  f"Could not save the profile:\n{e}")
             return
 
-        # ── success: clear buffer & notify ──────────────────────────
         self._pendingSave = None
         QMessageBox.information(self, "Saved",
                                  "Profile saved successfully.")
@@ -955,53 +1015,74 @@ class MainWindow(QtWidgets.QMainWindow):
         soil_series      = self.ui.soilSeries_line.text()
         soil_classification = self.ui.soilClassification_line.text()
 
-        # ── 1) Institute Code precisa de ≥2 caracteres ------------------------
+        # Institute Code precisa de 2 caracteres
         if len(institute_code.strip()) != 2:
             QMessageBox.warning(self, "Invalid institute code",
                                 "Institute Code must contain exactly 2 characters.")
-            return                                # permanece na página 0
+            return                               
 
-        # ── 2) Latitude / Longitude ------------------------------------------ 
-        #     • vazios → assume -99 (missing)
-        #     • se não vazios → devem ser numéricos e dentro dos limites
-        # ---------------------------------------------------------------------
-        # latitude -------------------------------------------------------------
+        # latitude 
         if latitude_txt == "":
             lat = -99
-            self.ui.latitude_line.setText("-99")     # opcional: escreve na caixa
+            self.ui.latitude_line.setText("-99")
         else:
             try:
                 lat = float(latitude_txt)
             except ValueError:
                 QMessageBox.warning(self, "Invalid latitude",
-                                    "Latitude must be a number between -90 and 90 "
-                                    "or left blank (defaults to -99).")
+                                    "Latitude must be a number between -90 and 90 ")
                 return
             if lat != -99 and not (-90 <= lat <= 90):
                 QMessageBox.warning(self, "Invalid latitude",
                                     "Latitude must be between -90 and 90 degrees.")
                 return
 
-        # longitude ------------------------------------------------------------
+        # longitude 
         if longitude_txt == "":
             lon = -99
-            self.ui.longitude_line.setText("-99")     # opcional
+            self.ui.longitude_line.setText("-99")
         else:
             try:
                 lon = float(longitude_txt)
             except ValueError:
                 QMessageBox.warning(self, "Invalid longitude",
-                                    "Longitude must be a number between -180 and 180 "
-                                    "or left blank (defaults to -99).")
+                                    "Longitude must be a number between -180 and 180 ")
                 return
             if lon != -99 and not (-180 <= lon <= 180):
                 QMessageBox.warning(self, "Invalid longitude",
                                     "Longitude must be between -180 and 180 degrees.")
                 return
-        # ---------------------------------------------------------------------
+            
+        # % Slope
+        slope_txt = self.ui.slope_line.text().strip()
+        if slope_txt:
+            try:
+                slope_val = float(slope_txt)
+                if not (0 <= slope_val <= 100):
+                    QMessageBox.warning(self, "Invalid % Slope",
+                                        "% Slope must be between 0 and 100.")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Invalid % Slope",
+                                    "% Slope must be a number between 0 and 100.")
+                return
 
-        # ── tudo certo → avança para a próxima página -------------------------
-        self.ui.stackedWidget.setCurrentIndex(1)
+        # Fertility Factor
+        ff_txt = self.ui.fertilityFactor_line.text().strip()
+        if ff_txt:
+            try:
+                ff_val = float(ff_txt)
+                if not (0.0 <= ff_val <= 1.0):
+                    QMessageBox.warning(self, "Invalid Fertility Factor",
+                                        "Fertility Factor must be between 0 and 1.")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Fertility Factor",
+                                    "Fertility Factor must be a number between 0 and 1.")
+                return
+
+        # avança para a próxima página
+        self.ui.stackedWidget.setCurrentIndex(2)
 
     def handlePage0Cancel(self):
         self.close()
@@ -1019,25 +1100,246 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.stackedWidget.setCurrentIndex(1)
 
     def handlePage3Ok(self):
-        """
-        Final OK on the wizard.
+        def _dssat_decimal_ok(txt: str) -> bool:
+            """
+            DSSAT decimal digit rule: if the value contains a decimal point,
+            the integer part (everything before '.', including sign) must be
+            at most 3 characters long.  E.g. "-99.5" OK, "-999.5" NOT OK.
+            """
+            if '.' not in txt:
+                return True
+            int_part = txt.split('.')[0]
+            return len(int_part) <= 3
 
-        • Collect the data the user entered.
-        • Store it in memory (self._pendingSave).
-        • Do NOT touch the disk and do NOT ask for a profile code here.
-        """
-        # ensure there is at least one layer
+        # Albedo (SALB) 0-99, accepts -99
+        salb_txt = self.ui.lineEdit_2.text().strip()
+        if salb_txt and salb_txt != "-99":
+            try:
+                salb_val = float(salb_txt)
+                if not (0 <= salb_val <= 99):
+                    QMessageBox.warning(self, "Invalid Albedo",
+                                        "Albedo (SALB) must be between 0 and 99.")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Albedo",
+                                    "Albedo must be a number.")
+                return
+
+        # Runoff Curve Number (SLRO) 0-999, accepts -99
+        slro_txt = self.ui.lineEdit.text().strip()
+        if slro_txt and slro_txt != "-99":
+            try:
+                slro_val = float(slro_txt)
+                if not (0 <= slro_val <= 999):
+                    QMessageBox.warning(self, "Invalid Runoff Curve Number",
+                                        "Runoff Curve Number (SLRO) must be between 0 and 999.")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Runoff Curve Number",
+                                    "Runoff Curve Number must be a number between 0 and 999.")
+                return
+
+        # Drainage Rate (SLDR) 0-999, accepts -99
+        sldr_txt = self.ui.lineEdit_3.text().strip()
+        if sldr_txt and sldr_txt != "-99":
+            try:
+                sldr_val = float(sldr_txt)
+                if not (0 <= sldr_val <= 999):
+                    QMessageBox.warning(self, "Invalid Drainage Rate",
+                                        "Drainage Rate (SLDR) must be between 0 and 999.")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Drainage Rate",
+                                    "Drainage Rate must be a number between 0 and 999.")
+                return
+
+        # At least one layer
         layers = self._collect_layers()
         if not layers:
             QMessageBox.warning(self, "Error",
                                  "Add at least one soil layer before continuing.")
             return
 
-        # profile code comes from the current profile (if any);
-        # for a new profile we leave it blank and let File ▸ Save ask later
+        # Layer depth: positive, <= 600, strictly increasing
+        prev_depth = 0
+        for i, layer in enumerate(layers):
+            d = layer["slb"]
+            if d <= 0:
+                QMessageBox.warning(self, "Invalid layer depth",
+                                    f"Layer {i+1}: depth must be a positive value.")
+                return
+            if d > 600:
+                QMessageBox.warning(self, "Invalid layer depth",
+                                    f"Layer {i+1}: depth ({d} cm) cannot exceed 600 cm.")
+                return
+            if d <= prev_depth:
+                QMessageBox.warning(self, "Invalid layer depth",
+                                    f"Layer {i+1}: depth ({d} cm) must be greater "
+                                    f"than the previous layer ({prev_depth} cm).")
+                return
+            prev_depth = d
+
+        for i, layer in enumerate(layers):
+            lbl = f"Layer {i+1}"
+
+            # Master Horizon: -999 to 99999 decimal digit rule
+            slmh_txt = str(layer.get("slmh", "")).strip()
+            if slmh_txt and slmh_txt not in ("-99", ""):
+                try:
+                    slmh_val = float(slmh_txt)
+                    if not (-999 <= slmh_val <= 99999):
+                        QMessageBox.warning(self, "Invalid Master Horizon",
+                                            f"{lbl}: Master Horizon must be between -999 and 99999.")
+                        return
+                    if not _dssat_decimal_ok(slmh_txt):
+                        QMessageBox.warning(self, "Invalid Master Horizon",
+                                            f"{lbl}: Master Horizon integer part must be ≤ 3 digits.")
+                        return
+                except ValueError:
+                    pass
+
+            # Clay and Silt: 0-100, both missing or both present and sum has to be <= 100
+            clay_txt = str(layer.get("slcl", "")).strip()
+            silt_txt = str(layer.get("slsi", "")).strip()
+            clay_missing = clay_txt in ("-99", "")
+            silt_missing = silt_txt in ("-99", "")
+            if clay_missing != silt_missing:
+                QMessageBox.warning(self, "Invalid texture",
+                                    f"{lbl}: Clay and Silt must both be provided or both be -99.")
+                return
+            try:
+                clay = 0.0
+                silt = 0.0
+                if not clay_missing:
+                    clay = float(clay_txt)
+                    if not (0 <= clay <= 100):
+                        QMessageBox.warning(self, "Invalid clay content",
+                                            f"{lbl}: clay must be between 0 and 100%.")
+                        return
+                if not silt_missing:
+                    silt = float(silt_txt)
+                    if not (0 <= silt <= 100):
+                        QMessageBox.warning(self, "Invalid silt content",
+                                            f"{lbl}: silt must be between 0 and 100%.")
+                        return
+                if not clay_missing and not silt_missing:
+                    if clay + silt > 100:
+                        QMessageBox.warning(self, "Invalid texture",
+                                            f"{lbl}: clay ({clay}%) + silt ({silt}%) cannot exceed 100%.")
+                        return
+            except ValueError:
+                pass
+
+            # Stones: 0-100, accepts -99
+            slcf_txt = str(layer.get("slcf", "")).strip()
+            if slcf_txt and slcf_txt not in ("-99", ""):
+                try:
+                    slcf_val = float(slcf_txt)
+                    if not (0 <= slcf_val <= 100):
+                        QMessageBox.warning(self, "Invalid Stones",
+                                            f"{lbl}: Stones must be between 0 and 100%.")
+                        return
+                except ValueError:
+                    pass
+
+            # Organic Carbon: 0-58, accepts -99
+            sloc_txt = str(layer.get("sloc", "")).strip()
+            if sloc_txt and sloc_txt not in ("-99", ""):
+                try:
+                    sloc_val = float(sloc_txt)
+                    if not (0 <= sloc_val <= 58):
+                        QMessageBox.warning(self, "Invalid Organic Carbon",
+                                            f"{lbl}: Organic Carbon must be between 0 and 58.")
+                        return
+                except ValueError:
+                    pass
+
+            # pH: 0-14, accepts -99
+            slhw_txt = str(layer.get("slhw", "")).strip()
+            if slhw_txt and slhw_txt not in ("-99", ""):
+                try:
+                    slhw_val = float(slhw_txt)
+                    if not (0 <= slhw_val <= 14):
+                        QMessageBox.warning(self, "Invalid pH",
+                                            f"{lbl}: pH must be between 0 and 14.")
+                        return
+                except ValueError:
+                    pass
+
+            # CEC: 0-99999, accepts -99 and decimal digit rule 
+            scec_txt = str(layer.get("scec", "")).strip()
+            if scec_txt and scec_txt not in ("-99", ""):
+                try:
+                    scec_val = float(scec_txt)
+                    if not (0 <= scec_val <= 99999):
+                        QMessageBox.warning(self, "Invalid CEC",
+                                            f"{lbl}: CEC must be between 0 and 99999.")
+                        return
+                    if not _dssat_decimal_ok(scec_txt):
+                        QMessageBox.warning(self, "Invalid CEC",
+                                            f"{lbl}: CEC integer part must be ≤ 3 digits.")
+                        return
+                except ValueError:
+                    pass
+
+            # Total Nitrogen: 0-20, accepts -99
+            slni_txt = str(layer.get("slni", "")).strip()
+            if slni_txt and slni_txt not in ("-99", ""):
+                try:
+                    slni_val = float(slni_txt)
+                    if not (0 <= slni_val <= 20):
+                        QMessageBox.warning(self, "Invalid Total Nitrogen",
+                                            f"{lbl}: Total Nitrogen must be between 0 and 20.")
+                        return
+                except ValueError:
+                    pass
+
+            # More Inputs: all 0-999, accept -99
+            _more_inputs = [
+                ("slpa",  "Phosphorus isotherm A"),
+                ("slpb",  "Phosphorus isotherm B"),
+                ("caco3", "Calcium carbonate"),
+                ("slal",  "Aluminum"),
+                ("slke",  "Potassium exchangeable"),
+                ("sadc",  "Nitrate adsorption factor"),
+                ("slca",  "Calcium exchangeable"),
+            ]
+            for _key, _label in _more_inputs:
+                _txt = str(layer.get(_key, "")).strip()
+                if _txt and _txt not in ("-99", ""):
+                    try:
+                        _val = float(_txt)
+                        if not (0 <= _val <= 999):
+                            QMessageBox.warning(self, f"Invalid {_label}",
+                                                f"{lbl}: {_label} must be between 0 and 999.")
+                            return
+                    except ValueError:
+                        pass
+
+            # Calculate/Edit soil parameters fields
+            _calc_fields = [
+                ("slll", "Lower Limit",                0, 9),
+                ("sdul", "Drained Upper Limit",         0, 9),
+                ("ssat", "Saturated Water Content",     0, 9),
+                ("sbdm", "Bulk Density",                0, 2.65),
+                ("ssks", "Sat. Hydraulic Conductivity", 0, 99),
+                ("srgf", "Root Growth Factor",          0, 1),
+            ]
+            for _key, _label, _lo, _hi in _calc_fields:
+                _txt = str(layer.get(_key, "")).strip()
+                if _txt and _txt not in ("-99", ""):
+                    try:
+                        _val = float(_txt)
+                        if not (_lo <= _val <= _hi):
+                            QMessageBox.warning(self, f"Invalid {_label}",
+                                                f"{lbl}: {_label} must be between {_lo} and {_hi}.")
+                            return
+                    except ValueError:
+                        pass
+
         pid = self.currentProfile["code"] if self.currentProfile else ""
 
-        # collect header information (same fields used in _write_profile)
+        # collect header information
         kwargs = dict(
             profile_id          = pid,
             site                = self.ui.siteName_line.text() or "-99",
@@ -1057,11 +1359,11 @@ class MainWindow(QtWidgets.QMainWindow):
             }.get((self.ui.color_box.currentText() or "").strip(), ""),
         )
 
-        # stage everything for a future File ▸ Save
+        # stage everything for a future file save
         self._pendingSave = dict(
             sol_path     = Path(self.currentSolFile)
                            if self.currentSolFile else None,
-            current_code = pid,          # may be empty for a new profile
+            current_code = pid,
             kwargs       = kwargs,
         )
 
@@ -1070,7 +1372,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "Changes are now staged in memory.\n"
             "Choose File ▸ Save when you’re ready to write them to disk."
         )
-        self.ui.stackedWidget.setCurrentIndex(0)   # back to the first page
+        self.ui.stackedWidget.setCurrentIndex(1)    # back to the first page
 
     def handlePage3Cancel(self):
         self.ui.stackedWidget.setCurrentIndex(2)

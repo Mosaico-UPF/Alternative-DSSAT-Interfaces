@@ -15,7 +15,7 @@ def calculateMissingValues(self) -> None:
             except Exception:
                 return None
 
-        depth = f(0)   # só para referência - não será calculado
+        depth = f(0)   
         clay  = f(1)
         silt  = f(2)
         stones= f(3)
@@ -32,7 +32,6 @@ def calculateMissingValues(self) -> None:
         # Drained upper limit (θDUL / SDUL)
         dul = f(5)
         if dul is None and lll is not None:
-            # TODO: regra provisória
             # dul = lll + 0.08
             dul = lll + 0.08
             tw.setItem(r, 5, QTableWidgetItem(f"{dul:.3f}"))
@@ -40,14 +39,13 @@ def calculateMissingValues(self) -> None:
         # Saturated water content (θSAT / SSAT)
         sat = f(6)
         if sat is None and dul is not None:
-            # TODO: valor típico
             sat = dul + 0.10
             tw.setItem(r, 6, QTableWidgetItem(f"{sat:.3f}"))
 
         # Bulk density (SBDM) 
         bd = f(7)
         if bd is None and sat is not None:
-            # ρb ≈ (1 - θSAT) * 2.65 g cm⁻³
+            # ρb = (1 - θSAT) * 2.65 g cm⁻³
             bd = (1 - sat) * 2.65
             tw.setItem(r, 7, QTableWidgetItem(f"{bd:.2f}"))
 

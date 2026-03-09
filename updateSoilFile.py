@@ -21,7 +21,7 @@ def update_soil_file(file_path: str | Path, profile_id: str, updates: dict) -> N
     for key, value in updates.items():
         if key == "layers":
             soil_profile.table = [SoilLayer(**lay) for lay in value]
-            continue  # já tratou, pula p/ próximo
+            continue  # já tratou, pula para o próximo
 
         if key in soil_profile:
             soil_profile[key] = value
